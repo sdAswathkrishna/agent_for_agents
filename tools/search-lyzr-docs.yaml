@@ -1,0 +1,30 @@
+name: search-lyzr-docs
+description: Search docs.lyzr.ai for API references, code patterns, and SDK usage examples. Used by CodeGeneratorAgent to verify correct Lyzr ADK syntax.
+version: "1.0.0"
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+      description: Search query for Lyzr documentation
+    section:
+      type: string
+      description: "Optional: filter to a specific docs section (e.g. knowledge-base, agents, tools)"
+  required:
+    - query
+output_schema:
+  type: object
+  properties:
+    results:
+      type: array
+      items:
+        type: object
+    snippet:
+      type: string
+implementation:
+  type: script
+  path: lyzr_docs_tool.py
+  runtime: python3
+annotations:
+  read_only: true
+  idempotent: true

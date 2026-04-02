@@ -1,0 +1,34 @@
+name: generate-diagram
+description: Generate an architecture diagram for an AI agent system. Tries MCP bridge first, falls back to Python diagrams library.
+version: "1.0.0"
+input_schema:
+  type: object
+  properties:
+    agent_name:
+      type: string
+      description: Name of the agent being diagrammed
+    components:
+      type: array
+      description: List of component names to include in the diagram
+      items:
+        type: string
+    output_path:
+      type: string
+      description: File path where the diagram PNG should be saved
+  required:
+    - agent_name
+output_schema:
+  type: object
+  properties:
+    diagram_path:
+      type: string
+    method:
+      type: string
+      description: "mcp or fallback"
+implementation:
+  type: script
+  path: diagram_tool.py
+  runtime: python3
+annotations:
+  read_only: false
+  idempotent: true

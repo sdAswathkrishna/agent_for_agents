@@ -1,0 +1,34 @@
+name: get-lyzr-template
+description: Return boilerplate code templates for common Lyzr ADK patterns (basic agent, tools, memory, RAG, multi-agent, streaming).
+version: "1.0.0"
+input_schema:
+  type: object
+  properties:
+    template_type:
+      type: string
+      description: The type of template to return
+      enum:
+        - basic-agent
+        - agent-with-tools
+        - agent-with-memory
+        - agent-with-rag
+        - multi-agent
+        - fastapi-wrapper
+        - streaming
+  required:
+    - template_type
+output_schema:
+  type: object
+  properties:
+    template:
+      type: string
+      description: Python code template as a string
+    filename:
+      type: string
+implementation:
+  type: script
+  path: lyzr_docs_tool.py
+  runtime: python3
+annotations:
+  read_only: true
+  idempotent: true

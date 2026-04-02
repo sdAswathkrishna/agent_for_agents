@@ -1,0 +1,36 @@
+spec_version: "0.1.0"
+name: agent-for-agents
+version: 1.0.0
+description: >
+  A meta-agent that builds other AI agents. Describe the agent you want —
+  it gathers requirements through a guided 6-state conversation, generates
+  an architecture diagram, and produces ready-to-run Lyzr ADK Python code.
+author: aswathkrishna
+license: MIT
+
+model:
+  preferred: openai/gpt-4o
+  constraints:
+    temperature: 0.7
+    max_tokens: 8096
+
+skills:
+  - gather-requirements
+  - generate-agent-code
+
+tools:
+  - generate-diagram
+  - search-lyzr-docs
+  - get-lyzr-template
+
+runtime:
+  max_turns: 50
+  timeout: 300
+
+tags:
+  - meta-agent
+  - code-generation
+  - multi-agent
+  - lyzr-adk
+  - developer-tools
+  - agent-builder
