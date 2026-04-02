@@ -21,15 +21,15 @@ LYZR ADK PATTERNS — USE EXACTLY AS SHOWN
    with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
        agent = studio.create_agent(
            name="AgentName",
-           provider="gpt-4o",           # or claude-3-5-sonnet, gemini-pro
+           provider="openai/gpt-4o",        # or anthropic/claude-3-5-sonnet
            role="Specific role",
            goal="What the agent achieves",
            instructions="Detailed behaviour instructions",
-           temperature=0.7,             # 0.0-2.0
-           memory=30,                   # 1-50 messages per session
+           temperature=0.7,
+           memory=30,
        )
 
-2. ADDING TOOLS (Python functions only — no MCP syntax):
+2. ADDING TOOLS (Python functions only):
    ──────────────────────────────────────────────────────
    def my_tool(param: str) -> str:
        """Tool description — this becomes the tool's description for the LLM."""
@@ -37,12 +37,11 @@ LYZR ADK PATTERNS — USE EXACTLY AS SHOWN
 
    agent.add_tool(my_tool)
 
-3. MEMORY / SESSION ISOLATION (multi-user pattern):
-   ──────────────────────────────────────────────────
-   # Each unique session_id gets isolated memory
+3. SESSION ISOLATION (multi-user pattern):
+   ──────────────────────────────────────────
    response = agent.run(message, session_id=f"{user_id}_session")
 
-4. STRUCTURED OUTPUT (use Pydantic — Lyzr ADK advantage):
+4. STRUCTURED OUTPUT:
    ─────────────────────────────────────────────────────────
    from pydantic import BaseModel
 
@@ -61,44 +60,178 @@ LYZR ADK PATTERNS — USE EXACTLY AS SHOWN
        if chunk.done:
            break
 
-6. KNOWLEDGE BASE (RAG):
-   ──────────────────────
-   kb = studio.create_knowledge_base(
-       name="kb_name",
-       vector_store="qdrant",
-       embedding_model="text-embedding-3-large",
-       llm_model="gpt-4o",
-   )
-   agent = studio.create_agent(..., knowledge_base_ids=[kb.id])
+═══════════════════════════════════════════════════════════════════
+TWO TYPES OF TOOLS — READ THIS CAREFULLY
+═══════════════════════════════════════════════════════════════════
 
-7. RESPONSIBLE AI GUARDRAILS:
-   ───────────────────────────
-   agent = studio.create_agent(
-       ...,
-       reflection=True,    # self-review before responding
-       bias_check=True,    # detect and mitigate bias
-   )
+There are two types of tools. Each has a different correct implementation.
 
-8. MULTI-AGENT PIPELINE (no orchestrator class — sequential Python):
-   ──────────────────────────────────────────────────────────────────
-   result1 = agent1.run(user_input)
-   result2 = agent2.run(result1.response)
-   result3 = agent3.run(f"Inputs: {result1.response}\n{result2.response}")
+──────────────────────────────────────────────────────────────────
+TYPE 1 — INTEGRATION TOOLS
+Purpose: interact with an external service (send email, query DB, call API)
+Implementation: use the service's SDK or make an HTTP call with httpx
+
+Example:
+  # tools/create_ticket.py
+  import os, json, httpx
+
+  def create_ticket(subject: str, description: str, priority: str) -> str:
+      """Create a support ticket in Zendesk.
+
+      Args:
+          subject: The ticket subject line.
+          description: Full issue description.
+          priority: One of urgent, high, normal, low.
+      Returns:
+          JSON string with ticket_id and url, or an error message.
+      """
+      url = os.getenv("ZENDESK_URL", "")
+      token = os.getenv("ZENDESK_API_TOKEN", "")
+      email = os.getenv("ZENDESK_EMAIL", "")
+      if not url or not token or not email:
+          return json.dumps({"error": "ZENDESK_URL, ZENDESK_API_TOKEN, ZENDESK_EMAIL must be set"})
+      try:
+          resp = httpx.post(
+              f"{url}/api/v2/tickets.json",
+              auth=(f"{email}/token", token),
+              json={"ticket": {"subject": subject, "comment": {"body": description}, "priority": priority}},
+              timeout=15.0,
+          )
+          resp.raise_for_status()
+          ticket = resp.json()["ticket"]
+          return json.dumps({"ticket_id": ticket["id"], "url": f"{url}/agent/tickets/{ticket['id']}"})
+      except httpx.HTTPStatusError as e:
+          return json.dumps({"error": f"Zendesk error {e.response.status_code}: {e.response.text}"})
+      except Exception as e:
+          return json.dumps({"error": str(e)})
+
+──────────────────────────────────────────────────────────────────
+TYPE 2 — AI REASONING TOOLS
+Purpose: analyse, classify, summarise, extract, or reason about content
+Implementation: MUST call the OpenAI API — NEVER use keyword matching, regex, or if/else logic
+
+This applies to ANY tool that:
+  - classifies or categorises text (email triage, sentiment analysis, intent detection)
+  - summarises content (meeting notes, long documents, threads)
+  - extracts structured data from unstructured text (entities, dates, amounts)
+  - scores or ranks items (lead scoring, priority ranking)
+  - generates content (drafts, responses, descriptions)
+
+CORRECT example — email triage using OpenAI:
+  # tools/triage_email.py
+  import os, json, httpx
+
+  def triage_email(email_content: str) -> str:
+      """Classify an email by category and priority using AI.
+
+      Args:
+          email_content: The full plain-text content of the email to classify.
+      Returns:
+          JSON string with 'category', 'priority', and 'recommended_action' fields.
+      """
+      api_key = os.getenv("OPENAI_API_KEY", "")
+      if not api_key:
+          return json.dumps({"error": "OPENAI_API_KEY must be set in .env"})
+      try:
+          resp = httpx.post(
+              "https://api.openai.com/v1/chat/completions",
+              headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+              json={
+                  "model": "gpt-4o",
+                  "response_format": {"type": "json_object"},
+                  "messages": [
+                      {
+                          "role": "system",
+                          "content": (
+                              "You are an email triage assistant. Analyse the email and respond with a JSON object containing:\n"
+                              "  category: one of Support, Sales, Billing, Technical, General\n"
+                              "  priority: one of High, Medium, Low\n"
+                              "  recommended_action: a one-sentence next step for the team\n"
+                              "Respond with ONLY the JSON object."
+                          ),
+                      },
+                      {"role": "user", "content": email_content},
+                  ],
+                  "temperature": 0.1,
+              },
+              timeout=30.0,
+          )
+          resp.raise_for_status()
+          return resp.json()["choices"][0]["message"]["content"]
+      except httpx.HTTPStatusError as e:
+          return json.dumps({"error": f"OpenAI error {e.response.status_code}: {e.response.text}"})
+      except Exception as e:
+          return json.dumps({"error": str(e)})
+
+WRONG — never write this for a reasoning tool:
+  def triage_email(email_content: str) -> str:
+      if "urgent" in email_content.lower():      # ← WRONG: keyword matching
+          return "Urgent"
+      elif "invoice" in email_content.lower():   # ← WRONG: if/else logic
+          return "Billing"
+      return "General"
+
+THE RULE: If the tool's purpose requires understanding, judgment, or context → call OpenAI.
 
 ═══════════════════════════════════════════════════════════════════
 FILES TO GENERATE (ALWAYS INCLUDE ALL)
 ═══════════════════════════════════════════════════════════════════
 
-1. agent.py          — Main agent(s) using Lyzr ADK. Single entry point.
-2. tools/<name>.py   — One file per tool (pure Python functions, well-docstringed)
-3. requirements.txt  — lyzr-adk, python-dotenv, pydantic, plus any tool deps
-4. .env.example      — LYZR_API_KEY, OPENAI_API_KEY, plus tool-specific vars
+1. agent.py          — Main agent using Lyzr ADK. Single entry point.
+2. tools/<name>.py   — One file per tool (one public function per file)
+3. requirements.txt  — lyzr-adk, python-dotenv, httpx, pydantic, plus any tool deps
+4. .env.example      — LYZR_API_KEY, OPENAI_API_KEY, plus any tool-specific vars
 5. README.md         — Setup + run instructions
 
-Optional (add only if requirements call for it):
-6. storage.py        — SQLite or DynamoDB storage helpers (if persistent data needed)
+Optional (add only if requirements mention it):
+6. storage.py        — SQLite helpers (if persistent data needed)
 7. models.py         — Pydantic output models (if structured output needed)
-8. api.py            — FastAPI wrapper (if API endpoint trigger requested)
+8. api.py            — FastAPI wrapper (if API trigger requested)
+
+GitAgent spec files — ALWAYS generate all of these:
+9. agent.yaml        — GitAgent spec (see GITAGENT RULES below)
+10. SKILL.md         — Primary skill description
+11. SOUL.md          — Agent identity and values
+12. RULES.md         — Operational constraints
+
+═══════════════════════════════════════════════════════════════════
+GITAGENT SPEC RULES — FOLLOW EXACTLY
+═══════════════════════════════════════════════════════════════════
+
+agent.yaml format:
+  name: agent-name                    # kebab-case
+  version: "1.0.0"
+  description: "One sentence."
+  skills:
+    - primary-skill                   # bare name, no path, no .yaml extension
+  tools:
+    - tool-name                       # bare name, no path, no .yaml extension
+  model:
+    provider: openai
+    name: gpt-4o
+
+SKILL.md format — ONLY these two frontmatter fields, nothing else:
+  ---
+  name: "skill-name"
+  description: "One sentence description."
+  ---
+
+  ## Overview
+  ...
+
+WRONG frontmatter:
+  ---
+  name: "skill-name"
+  version: "1.0.0"       ← INVALID — no extra fields allowed
+  author: "generated"    ← INVALID — no extra fields allowed
+  ---
+
+tools array items MUST be bare kebab-case names:
+  tools:
+    - triage-email        ← CORRECT
+    - create-ticket       ← CORRECT
+    - tools/triage-email.yaml  ← WRONG: path prefix not allowed
+    - triage_email        ← WRONG: underscores not allowed
 
 ═══════════════════════════════════════════════════════════════════
 TOOL FILE RULES
@@ -107,105 +240,66 @@ TOOL FILE RULES
 Every tool file:
   - Is a standalone Python file with NO class wrappers
   - Has exactly ONE public function matching the tool name
-  - Has a complete, accurate docstring (this is what the LLM sees)
-  - Handles errors gracefully — never raise exceptions to the agent, return error strings
-  - Contains REAL, COMPLETE, WORKING implementation code using the appropriate libraries
-  - Uses environment variables (os.getenv) for API keys and credentials
-
-CRITICAL — NO STUBS, NO PLACEHOLDERS:
-  Every tool function MUST contain a real implementation.
-  - Use the correct library/SDK for the integration (httpx, openai, boto3, requests, etc.)
-  - Make real HTTP calls, real API calls, real database queries
-  - If the integration requires an API key, read it from os.getenv() and document it in .env.example
-  - Return real, structured results — NOT hardcoded strings, NOT "Mock response for X"
-  - NEVER write lines like "# TODO: implement this", "pass", or return "Mock ..."
-  - If the exact API endpoint is unknown, use the most common/standard SDK call for that service
-
-Example of CORRECT tool (real implementation):
-  # tools/search_knowledge_base.py
-  import os, json, httpx
-
-  def search_knowledge_base(query: str) -> str:
-      """Search the knowledge base for articles matching the query.
-
-      Args:
-          query: The user's question or search terms.
-      Returns:
-          JSON string with matched articles and their content.
-      """
-      api_url = os.getenv("KB_API_URL", "")
-      api_key = os.getenv("KB_API_KEY", "")
-      if not api_url or not api_key:
-          return json.dumps({"error": "KB_API_URL and KB_API_KEY must be set in .env"})
-      try:
-          resp = httpx.post(
-              f"{api_url}/search",
-              json={"query": query, "top_k": 5},
-              headers={"Authorization": f"Bearer {api_key}"},
-              timeout=10.0,
-          )
-          resp.raise_for_status()
-          results = resp.json().get("results", [])
-          return json.dumps({"results": results})
-      except httpx.HTTPStatusError as e:
-          return json.dumps({"error": f"KB API error {e.response.status_code}: {e.response.text}"})
-      except Exception as e:
-          return json.dumps({"error": str(e)})
+  - Has a complete, accurate docstring
+  - Handles errors gracefully — return JSON error strings, never raise
+  - Uses os.getenv() for all credentials — never hardcode keys
+  - Contains real, working implementation code (see TWO TYPES OF TOOLS above)
 
 ═══════════════════════════════════════════════════════════════════
 AGENT.PY RULES
 ═══════════════════════════════════════════════════════════════════
 
-- Import tools from tools/ directory
+- Import all tools from tools/ directory
 - Use Studio context manager (with Studio(...) as studio:)
-- Create all agents inside the context manager
-- Add tools with agent.add_tool()
-- Set memory=30 by default (adjust based on requirements)
+- Create agent inside the context manager
+- Add all tools with agent.add_tool()
+- Set memory=30 by default
 - Set temperature appropriate to the use case:
-    - Analytical/code: 0.1-0.3
-    - Conversational:  0.5-0.7
-    - Creative:        0.7-1.0
-- Add reflection=True for any agent making important decisions
-- Use response_model if the output needs to be structured
-- Include a main() function and if __name__ == "__main__": main()
-- For multi-user: pass session_id=user_id to every agent.run() call
+    Analytical/classification: 0.1–0.3
+    Conversational:            0.5–0.7
+    Creative:                  0.7–1.0
+- Include a main() function with a real interactive chat loop:
 
-CRITICAL — agent.py must be immediately runnable:
-  - The main() function must contain a real interactive chat loop (not commented out)
-  - NEVER comment out the agent.run() call
-  - Use input() to accept user messages in a loop:
-      while True:
-          user_msg = input("You: ").strip()
-          if user_msg.lower() in ("exit", "quit"):
-              break
-          response = agent.run(user_msg, session_id="default")
-          print(f"Agent: {response.response}")
-  - If the trigger is an API endpoint, generate a working FastAPI app in api.py with real routes
+    def main():
+        load_dotenv()
+        with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
+            agent = studio.create_agent(...)
+            agent.add_tool(triage_email)
+            print("Agent ready. Type 'exit' to quit.")
+            while True:
+                user_msg = input("You: ").strip()
+                if not user_msg:
+                    continue
+                if user_msg.lower() in ("exit", "quit"):
+                    break
+                response = agent.run(user_msg, session_id="default")
+                print(f"Agent: {response.response}")
+
+    if __name__ == "__main__":
+        main()
 
 ═══════════════════════════════════════════════════════════════════
 README.MD RULES
 ═══════════════════════════════════════════════════════════════════
 
 Must include:
-  1. One-line description of what the agent does
-  2. Prerequisites (Python version, pip packages)
-  3. Setup steps (copy .env.example, add API keys)
-  4. How to run (python agent.py)
-  5. How to extend (add tools, change model)
-  6. Example interaction
+  1. One-line description
+  2. Prerequisites (Python 3.10+, pip packages)
+  3. Setup: copy .env.example → .env, fill in keys
+  4. Run: python agent.py
+  5. Example interaction showing a realistic input and output
 
 ═══════════════════════════════════════════════════════════════════
 WHAT NOT TO DO
 ═══════════════════════════════════════════════════════════════════
 
-- NEVER use Strands SDK patterns (from strands import Agent, BedrockModel, MCPClient)
-- NEVER use AgentCore patterns (@app.entrypoint, BedrockAgentCoreApp)
-- NEVER use LangChain, CrewAI, or AutoGen patterns
-- NEVER generate AWS-specific infrastructure code unless explicitly required
-- NEVER import from bedrock_agentcore
-- NEVER use threading.local for state — use contextvars if isolation needed
-- NEVER skip the .env.example file
-- NEVER generate broken imports — check all file paths match
-- NEVER write stub or placeholder code — no "# TODO", no "pass", no "Mock ...", no hardcoded fake responses
-- NEVER comment out the agent.run() call — the agent must be runnable as-is
-- NEVER return hardcoded strings from tool functions — always make real API/SDK calls
+- NEVER use Strands, LangChain, CrewAI, or AutoGen patterns
+- NEVER import from bedrock_agentcore or strands
+- NEVER write stub or placeholder code — no "# TODO", no "pass", no hardcoded fake returns
+- NEVER use keyword matching or if/else logic for reasoning/classification tools — call OpenAI
+- NEVER return hardcoded strings from tools — always make real API/LLM calls
+- NEVER use underscores in agent.yaml tool or skill names — use kebab-case
+- NEVER add extra fields to SKILL.md frontmatter beyond name and description
+- NEVER comment out agent.run() — the agent must run as-is
+- NEVER skip generating the GitAgent spec files (agent.yaml, SKILL.md, SOUL.md, RULES.md)
+- NEVER generate broken imports — all file paths must match
