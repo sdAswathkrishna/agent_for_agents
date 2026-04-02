@@ -1307,6 +1307,7 @@ function App() {
 
         {/* ── Right panel ── */}
         <BuilderPanel
+          key={activeProject?.project_id ?? 'none'}
           status={status}
           genJob={genJob}
           projectId={activeProject?.project_id}
