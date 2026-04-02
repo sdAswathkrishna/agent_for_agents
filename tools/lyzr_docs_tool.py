@@ -135,7 +135,7 @@ load_dotenv()
 with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     agent = studio.create_agent(
         name="MyAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Your agent role",
         goal="What the agent should achieve",
         instructions="Detailed instructions for the agent behaviour",
@@ -165,7 +165,7 @@ def my_tool(param: str) -> str:
 with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     agent = studio.create_agent(
         name="ToolAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Agent role",
         goal="Agent goal",
         instructions="Use available tools to complete tasks.",
@@ -186,7 +186,7 @@ load_dotenv()
 with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     agent = studio.create_agent(
         name="MemoryAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Conversational assistant",
         goal="Maintain context across a conversation",
         instructions="Remember what the user has told you. Reference earlier context.",
@@ -227,7 +227,7 @@ with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
 
     agent = studio.create_agent(
         name="RAGAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Knowledge-grounded assistant",
         goal="Answer questions using the knowledge base",
         instructions="Always query the knowledge base before answering. Cite sources.",
@@ -249,7 +249,7 @@ with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     # Agent 1 — first stage
     agent1 = studio.create_agent(
         name="StageOneAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Stage 1 processor",
         goal="Transform raw input into structured data",
         instructions="Process the input and output structured results.",
@@ -259,7 +259,7 @@ with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     # Agent 2 — second stage (receives output of agent1)
     agent2 = studio.create_agent(
         name="StageTwoAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Stage 2 processor",
         goal="Enrich structured data with additional context",
         instructions="Take the structured input and enrich it.",
@@ -269,7 +269,7 @@ with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     # Agent 3 — final stage
     agent3 = studio.create_agent(
         name="StageThreeAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Report generator",
         goal="Produce a final formatted report",
         instructions="Synthesize all inputs into a clean final report.",
@@ -303,7 +303,7 @@ class AnalysisResult(BaseModel):
 with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     agent = studio.create_agent(
         name="AnalysisAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Data analyst",
         goal="Produce structured analysis of input text",
         instructions=(
@@ -330,7 +330,7 @@ load_dotenv()
 with Studio(api_key=os.getenv("LYZR_API_KEY")) as studio:
     agent = studio.create_agent(
         name="StreamingAgent",
-        provider="gpt-4o",
+        provider="openai/gpt-4o",
         role="Streaming assistant",
         goal="Provide real-time streamed responses",
         instructions="Respond naturally to user messages.",

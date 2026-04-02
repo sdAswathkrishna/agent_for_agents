@@ -137,20 +137,30 @@ def _build_generation_prompt(
     requirements: Requirements,
     refinement_request: Optional[str] = None,
 ) -> str:
-    # Derive snake_case agent name from problem description
     import re as _re
-    agent_name = _re.sub(r"[^a-z0-9]+", "-", requirements.problem.lower()[:40]).strip("-") or "my-agent"
 
-    # Derive skill names from tools list (or sensible defaults)
+    # Derive agent name: take first 4 meaningful words from the problem description
+    _words = _re.findall(r"[a-z0-9]+", requirements.problem.lower())
+    _stop  = {"a", "an", "the", "that", "this", "and", "or", "for", "to", "of", "with", "using", "via", "i", "we"}
+    _key   = [w for w in _words if w not in _stop][:4]
+    agent_name = "-".join(_key) if _key else "my-agent"
+
+    # Derive skill names from the FULL tools list — no cap
     skill_names = []
     if requirements.tools:
-        for t in requirements.tools[:3]:
-            skill_names.append(_re.sub(r"[^a-z0-9]+", "-", t.lower()[:30]).strip("-"))
+        for t in requirements.tools:
+            skill_names.append(_re.sub(r"[^a-z0-9]+", "-", t.lower()).strip("-"))
     if not skill_names:
-        skill_names = ["handle-request", "respond-to-user"]
+        # Infer tool names from problem when tools list is empty (e.g. after shortcut trigger)
+        # Use first 2 key words to form a sensible default tool name
+        _tool_base = "-".join(_key[:2]) if len(_key) >= 2 else "process-request"
+        skill_names = [_tool_base]
 
     # Derive tool yaml names (same as tools, kebab-case)
     tool_yaml_names = skill_names[:]
+
+    # LLM provider — use the user's preference if captured, else default
+    llm_provider = getattr(requirements, "llm_provider", None) or "openai/gpt-4o"
 
     base = f"""
 Generate a complete, portable AI agent package based on these requirements.
@@ -163,23 +173,23 @@ REQUIREMENTS:
 PART A — LYZR ADK CODE FILES
 ═══════════════════════════════════
 - Tech stack: Lyzr ADK (Python)
-- LLM provider: {requirements.tech_stack.value if hasattr(requirements.tech_stack, 'value') else 'lyzr-adk'}
+- LLM provider: {llm_provider} — use this EXACT string in studio.create_agent(provider="{llm_provider}")
 - Use search_lyzr_docs() to verify any API you're unsure about
 - Use get_lyzr_code_template() to start from a correct base structure
 - Generate: agent.py, tools/*.py, requirements.txt, .env.example, README.md
+- requirements.txt MUST always include: lyzr-adk, python-dotenv, httpx, pydantic
+- .env.example MUST contain EVERY environment variable referenced in ANY tool file — no exceptions
 
 SPECIFIC REQUIREMENTS:
 Problem:      {requirements.problem}
 Target users: {requirements.target_users}
-Tools needed: {', '.join(requirements.tools) if requirements.tools else 'none specified'}
-Triggers:     {', '.join(requirements.triggers) if requirements.triggers else 'chat interface'}
+Tools needed: {', '.join(requirements.tools) if requirements.tools else 'none specified — infer sensible tool names from the problem description'}
+Triggers:     {', '.join(requirements.triggers) if requirements.triggers else 'chat_ui'}
 Integrations: {', '.join(requirements.integrations) if requirements.integrations else 'none'}
+Storage:      {', '.join(requirements.storage) if requirements.storage else _format_storage(requirements)}
 
 MULTI-USER: {'Yes — use session_id=user_id in every agent.run() call' if requirements.multi_user.enabled else 'No — single user'}
 {f'Roles: {requirements.multi_user.roles}' if requirements.multi_user.enabled else ''}
-
-STORAGE:
-{_format_storage(requirements)}
 
 ═══════════════════════════════════
 PART B — GITAGENT SPEC FILES (CRITICAL)

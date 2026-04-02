@@ -84,9 +84,11 @@ class Requirements(BaseModel):
     tools:          list[str] = Field(default_factory=list)
     triggers:       list[str] = Field(default_factory=list)
     tech_stack:     TechStack = TechStack.LYZR_ADK
+    llm_provider:   str       = "openai/gpt-4o"   # set from STATE 3 LLM preference
     multi_user:     MultiUserConfig  = Field(default_factory=MultiUserConfig)
     aws_services:   AWSServices      = Field(default_factory=AWSServices)
     integrations:   list[str]        = Field(default_factory=list)
+    storage:        list[str]        = Field(default_factory=list)   # non-AWS: ["postgresql", "redis", "sqlite"]
     error_handling: dict             = Field(default_factory=dict)
 
 
