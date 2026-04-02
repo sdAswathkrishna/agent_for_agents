@@ -187,6 +187,16 @@ async def chat(project_id: str, body: ChatRequest):
     if output.is_complete:
         new_status = ProjectStatus.DESIGNING
 
+    # Copy diagram to project-specific location so it can be served per-project
+    if output.diagram_path:
+        import shutil
+        from pathlib import Path as _Path
+        default_diagram = _Path("./artifacts/diagram/architecture.png")
+        if default_diagram.exists():
+            dest = artifacts._project_dir(project_id) / "diagram" / "architecture.png"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(default_diagram), str(dest))
+
     # Update project in DB
     await db.update_project(
         project_id=project_id,
@@ -325,6 +335,16 @@ async def _run_generation(project_id: str, project: Project):
 # ─────────────────────────────────────────────────────────────────────────────
 # Artifacts
 # ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/projects/{project_id}/diagram")
+async def get_diagram(project_id: str):
+    """Serve the architecture diagram PNG for a project."""
+    from pathlib import Path as _Path
+    path = artifacts._project_dir(project_id) / "diagram" / "architecture.png"
+    if not path.exists():
+        raise HTTPException(404, "No diagram available for this project")
+    return FileResponse(str(path), media_type="image/png")
+
 
 @app.get("/projects/{project_id}/artifacts", response_model=list[ArtifactMeta])
 async def list_artifacts(project_id: str):

@@ -996,14 +996,18 @@ function App() {
       });
       const data = await r.json();
 
-      const addCTA = data.conversation_state === 'architecture';
-      setMessages(m => m.filter(x => x.id !== tid).concat([
-        { id: uid+2, role:'agent', text:data.message, diagram:data.diagram_path,
-          state:data.conversation_state, time:now() },
-        ...(addCTA
-          ? [{ id: uid+3, role:'agent', type:'generate_cta', time:now() }]
-          : []),
-      ]));
+      const addCTA = ['architecture', 'complete'].includes(data.conversation_state);
+      setMessages(m => {
+        const filtered = m.filter(x => x.id !== tid);
+        const hasCTA = filtered.some(x => x.type === 'generate_cta');
+        return filtered.concat([
+          { id: uid+2, role:'agent', text:data.message, diagram:data.diagram_path,
+            state:data.conversation_state, time:now() },
+          ...(addCTA && !hasCTA
+            ? [{ id: uid+3, role:'agent', type:'generate_cta', time:now() }]
+            : []),
+        ]);
+      });
 
       const pr = await fetch(`${API}/projects/${activeProject.project_id}`);
       const p  = await pr.json();
@@ -1258,7 +1262,7 @@ function App() {
                               <div className="diagram-container">
                                 <div className="diagram-label">⬡ Architecture</div>
                                 <img
-                                  src={`${API}/projects/${activeProject.project_id}/artifacts/diagram/architecture.png`}
+                                  src={`${API}/projects/${activeProject.project_id}/diagram`}
                                   alt="Architecture diagram"
                                   onError={e => e.target.style.display='none'} />
                               </div>
