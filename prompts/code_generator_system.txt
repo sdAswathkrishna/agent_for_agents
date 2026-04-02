@@ -108,29 +108,49 @@ Every tool file:
   - Is a standalone Python file with NO class wrappers
   - Has exactly ONE public function matching the tool name
   - Has a complete, accurate docstring (this is what the LLM sees)
-  - Handles errors gracefully — never raise exceptions to the agent
-  - Includes mock implementation with TODO comments for real integration
-  - Includes the real API integration pattern in a comment block
+  - Handles errors gracefully — never raise exceptions to the agent, return error strings
+  - Contains REAL, COMPLETE, WORKING implementation code using the appropriate libraries
+  - Uses environment variables (os.getenv) for API keys and credentials
 
-Example structure:
-  # tools/search_web.py
-  def search_web(query: str, num_results: int = 5) -> str:
-      """Search the web and return relevant results.
+CRITICAL — NO STUBS, NO PLACEHOLDERS:
+  Every tool function MUST contain a real implementation.
+  - Use the correct library/SDK for the integration (httpx, openai, boto3, requests, etc.)
+  - Make real HTTP calls, real API calls, real database queries
+  - If the integration requires an API key, read it from os.getenv() and document it in .env.example
+  - Return real, structured results — NOT hardcoded strings, NOT "Mock response for X"
+  - NEVER write lines like "# TODO: implement this", "pass", or return "Mock ..."
+  - If the exact API endpoint is unknown, use the most common/standard SDK call for that service
+
+Example of CORRECT tool (real implementation):
+  # tools/search_knowledge_base.py
+  import os, json, httpx
+
+  def search_knowledge_base(query: str) -> str:
+      """Search the knowledge base for articles matching the query.
 
       Args:
-          query:       Search query string.
-          num_results: Number of results to return (default 5).
+          query: The user's question or search terms.
       Returns:
-          JSON string with search results.
+          JSON string with matched articles and their content.
       """
-      # TODO: Replace with real search API (e.g. SerpAPI, Tavily, Bing)
-      # Real implementation:
-      #   import requests
-      #   resp = requests.get("https://api.tavily.com/search",
-      #                       json={"query": query, "num_results": num_results},
-      #                       headers={"Authorization": f"Bearer {os.getenv('TAVILY_KEY')}"})
-      #   return json.dumps(resp.json())
-      return json.dumps({"results": [{"title": "Mock result", "url": "https://example.com"}]})
+      api_url = os.getenv("KB_API_URL", "")
+      api_key = os.getenv("KB_API_KEY", "")
+      if not api_url or not api_key:
+          return json.dumps({"error": "KB_API_URL and KB_API_KEY must be set in .env"})
+      try:
+          resp = httpx.post(
+              f"{api_url}/search",
+              json={"query": query, "top_k": 5},
+              headers={"Authorization": f"Bearer {api_key}"},
+              timeout=10.0,
+          )
+          resp.raise_for_status()
+          results = resp.json().get("results", [])
+          return json.dumps({"results": results})
+      except httpx.HTTPStatusError as e:
+          return json.dumps({"error": f"KB API error {e.response.status_code}: {e.response.text}"})
+      except Exception as e:
+          return json.dumps({"error": str(e)})
 
 ═══════════════════════════════════════════════════════════════════
 AGENT.PY RULES
@@ -149,6 +169,18 @@ AGENT.PY RULES
 - Use response_model if the output needs to be structured
 - Include a main() function and if __name__ == "__main__": main()
 - For multi-user: pass session_id=user_id to every agent.run() call
+
+CRITICAL — agent.py must be immediately runnable:
+  - The main() function must contain a real interactive chat loop (not commented out)
+  - NEVER comment out the agent.run() call
+  - Use input() to accept user messages in a loop:
+      while True:
+          user_msg = input("You: ").strip()
+          if user_msg.lower() in ("exit", "quit"):
+              break
+          response = agent.run(user_msg, session_id="default")
+          print(f"Agent: {response.response}")
+  - If the trigger is an API endpoint, generate a working FastAPI app in api.py with real routes
 
 ═══════════════════════════════════════════════════════════════════
 README.MD RULES
@@ -174,3 +206,6 @@ WHAT NOT TO DO
 - NEVER use threading.local for state — use contextvars if isolation needed
 - NEVER skip the .env.example file
 - NEVER generate broken imports — check all file paths match
+- NEVER write stub or placeholder code — no "# TODO", no "pass", no "Mock ...", no hardcoded fake responses
+- NEVER comment out the agent.run() call — the agent must be runnable as-is
+- NEVER return hardcoded strings from tool functions — always make real API/SDK calls

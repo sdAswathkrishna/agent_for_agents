@@ -193,9 +193,13 @@ Generate these GitAgent open-standard files so the agent passes `gitagent valida
    - `skills`: ARRAY OF STRINGS — each string is a folder name under skills/
      CORRECT:   skills:\n  - {skill_names[0]}
      WRONG:     skills:\n  - name: {skill_names[0]}   ← objects are INVALID
-   - `tools`: ARRAY OF STRINGS — each string is a YAML filename under tools/
-     CORRECT:   tools:\n  - tools/{tool_yaml_names[0]}.yaml
-     WRONG:     tools:\n  - name: {tool_yaml_names[0]}  ← objects are INVALID
+   - `tools`: ARRAY OF BARE TOOL NAMES — no path prefix, no .yaml extension
+     Pattern must match "^[a-z][a-z0-9-]*$" — only lowercase letters, digits, hyphens
+     gitagent resolves tools automatically: it looks for tools/<name>.yaml on disk.
+     CORRECT:   tools:\n  - {tool_yaml_names[0]}
+     WRONG:     tools:\n  - tools/{tool_yaml_names[0]}.yaml  ← path prefix INVALID
+     WRONG:     tools:\n  - {tool_yaml_names[0]}.yaml        ← .yaml extension INVALID
+     WRONG:     tools:\n  - name: {tool_yaml_names[0]}       ← objects are INVALID
    - `runtime`: OBJECT (not a string)
      CORRECT:   runtime:\n  max_turns: 50\n  timeout: 300
      WRONG:     runtime: "lyzr"  ← strings are INVALID
@@ -215,15 +219,28 @@ Generate these GitAgent open-standard files so the agent passes `gitagent valida
 4. skills/{skill_names[0]}/SKILL.md  — one SKILL.md per skill folder.
    STRICT FRONTMATTER RULES (violations cause validate to fail):
    - The file MUST begin with YAML frontmatter delimited by ---
-   - ALL frontmatter values MUST be strings (not integers/booleans)
-     CORRECT:   states: "3"       ← string
-     WRONG:     states: 3         ← integer INVALID
-   - Required frontmatter fields: name, version, description, author
+   - ONLY TWO frontmatter fields are allowed: name and description. No others.
+     Adding ANY other field (version, author, states, triggers, etc.) causes "additional properties" errors.
+     CORRECT frontmatter (exactly this, nothing more):
+       ---
+       name: "skill-name"
+       description: "One sentence description of this skill."
+       ---
+     WRONG (extra fields cause validate to fail):
+       ---
+       name: "skill-name"
+       version: "1.0.0"     ← INVALID extra field
+       description: "..."
+       author: "generated"  ← INVALID extra field
+       ---
    - After frontmatter, write a markdown description of what this skill does.
 
    Generate one SKILL.md for each skill: {', '.join(f'skills/{s}/SKILL.md' for s in skill_names)}
 
-5. tools/{tool_yaml_names[0]}.yaml  — one YAML per tool (MCP-compatible schema).
+5. tools/<tool-name>.yaml  — one YAML per tool (MCP-compatible schema).
+   FILE NAMING RULE: Use pure kebab-case for ALL file names — hyphens only, NO underscores.
+   The .yaml filename must exactly match the bare name used in agent.yaml tools array.
+   If agent.yaml says `- search-knowledge-base`, the file is `tools/search-knowledge-base.yaml`.
    Use this exact structure:
    ```
    name: tool-name
