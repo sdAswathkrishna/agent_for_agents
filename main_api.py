@@ -35,6 +35,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from lyzr import Studio
@@ -100,6 +101,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve UI — open http://localhost:8000/ui/ in the browser
+_UI_DIR = os.path.join(os.path.dirname(__file__), "ui")
+if os.path.isdir(_UI_DIR):
+    app.mount("/ui", StaticFiles(directory=_UI_DIR, html=True), name="ui")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -331,6 +337,29 @@ async def get_artifact(project_id: str, file_path: str):
     if content is None:
         raise HTTPException(404, f"Artifact '{file_path}' not found")
     return {"path": file_path, "content": content}
+
+
+@app.get("/projects/{project_id}/files")
+async def list_files(project_id: str):
+    """
+    Return the full file tree + content for all generated artifacts.
+    Used by the UI to populate the file viewer panel after generation.
+    """
+    project = await db.get_project(project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    file_list = await artifacts.list_artifacts(project_id)
+    result = []
+    for meta in file_list:
+        content = await artifacts.get_artifact(project_id, meta.path)
+        result.append({
+            "path":  meta.path,
+            "type":  meta.type,
+            "size":  meta.size_bytes,
+            "content": content or "",
+        })
+    return result
 
 
 @app.get("/projects/{project_id}/download")

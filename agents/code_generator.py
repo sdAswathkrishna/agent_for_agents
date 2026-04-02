@@ -137,22 +137,38 @@ def _build_generation_prompt(
     requirements: Requirements,
     refinement_request: Optional[str] = None,
 ) -> str:
+    # Derive snake_case agent name from problem description
+    import re as _re
+    agent_name = _re.sub(r"[^a-z0-9]+", "-", requirements.problem.lower()[:40]).strip("-") or "my-agent"
+
+    # Derive skill names from tools list (or sensible defaults)
+    skill_names = []
+    if requirements.tools:
+        for t in requirements.tools[:3]:
+            skill_names.append(_re.sub(r"[^a-z0-9]+", "-", t.lower()[:30]).strip("-"))
+    if not skill_names:
+        skill_names = ["handle-request", "respond-to-user"]
+
+    # Derive tool yaml names (same as tools, kebab-case)
+    tool_yaml_names = skill_names[:]
+
     base = f"""
-Generate a complete Lyzr ADK agent based on these requirements.
+Generate a complete, portable AI agent package based on these requirements.
+The package MUST include BOTH: (A) Lyzr ADK runtime code AND (B) GitAgent spec files.
 
 REQUIREMENTS:
 {requirements.model_dump_json(indent=2)}
 
-GENERATION INSTRUCTIONS:
+═══════════════════════════════════
+PART A — LYZR ADK CODE FILES
+═══════════════════════════════════
 - Tech stack: Lyzr ADK (Python)
 - LLM provider: {requirements.tech_stack.value if hasattr(requirements.tech_stack, 'value') else 'lyzr-adk'}
 - Use search_lyzr_docs() to verify any API you're unsure about
 - Use get_lyzr_code_template() to start from a correct base structure
-- Generate agent.py as the main entry point
-- Generate tools/ directory with one file per tool
-- Generate requirements.txt, .env.example, README.md
+- Generate: agent.py, tools/*.py, requirements.txt, .env.example, README.md
 
-SPECIFIC REQUIREMENTS TO IMPLEMENT:
+SPECIFIC REQUIREMENTS:
 Problem:      {requirements.problem}
 Target users: {requirements.target_users}
 Tools needed: {', '.join(requirements.tools) if requirements.tools else 'none specified'}
@@ -165,7 +181,69 @@ MULTI-USER: {'Yes — use session_id=user_id in every agent.run() call' if requi
 STORAGE:
 {_format_storage(requirements)}
 
-Return the CodeGeneratorOutput with all files in the `files` list.
+═══════════════════════════════════
+PART B — GITAGENT SPEC FILES (CRITICAL)
+═══════════════════════════════════
+Generate these GitAgent open-standard files so the agent passes `gitagent validate`:
+
+1. agent.yaml  — root spec file. STRICT SCHEMA RULES (violations cause validate to fail):
+   - `name`: string, kebab-case e.g. "{agent_name}"
+   - `version`: string e.g. "1.0.0"
+   - `description`: string (one sentence)
+   - `skills`: ARRAY OF STRINGS — each string is a folder name under skills/
+     CORRECT:   skills:\n  - {skill_names[0]}
+     WRONG:     skills:\n  - name: {skill_names[0]}   ← objects are INVALID
+   - `tools`: ARRAY OF STRINGS — each string is a YAML filename under tools/
+     CORRECT:   tools:\n  - tools/{tool_yaml_names[0]}.yaml
+     WRONG:     tools:\n  - name: {tool_yaml_names[0]}  ← objects are INVALID
+   - `runtime`: OBJECT (not a string)
+     CORRECT:   runtime:\n  max_turns: 50\n  timeout: 300
+     WRONG:     runtime: "lyzr"  ← strings are INVALID
+   - `model`: object with `preferred` field only
+     CORRECT:   model:\n  preferred: openai/gpt-4o
+   - `author`: string (your name or "generated")
+   - Do NOT include: repository, env, input, output, agents array, or any extra fields
+
+2. SOUL.md  — agent identity. Plain markdown, NO frontmatter needed.
+   Write 3–5 paragraphs describing: who this agent is, its personality,
+   communication style, and what it values. Be specific to the use case.
+
+3. RULES.md  — hard constraints. Plain markdown, NO frontmatter needed.
+   Write 5–8 numbered rules the agent must NEVER violate.
+   Keep rules specific and concrete (not generic AI safety platitudes).
+
+4. skills/{skill_names[0]}/SKILL.md  — one SKILL.md per skill folder.
+   STRICT FRONTMATTER RULES (violations cause validate to fail):
+   - The file MUST begin with YAML frontmatter delimited by ---
+   - ALL frontmatter values MUST be strings (not integers/booleans)
+     CORRECT:   states: "3"       ← string
+     WRONG:     states: 3         ← integer INVALID
+   - Required frontmatter fields: name, version, description, author
+   - After frontmatter, write a markdown description of what this skill does.
+
+   Generate one SKILL.md for each skill: {', '.join(f'skills/{s}/SKILL.md' for s in skill_names)}
+
+5. tools/{tool_yaml_names[0]}.yaml  — one YAML per tool (MCP-compatible schema).
+   Use this exact structure:
+   ```
+   name: tool-name
+   description: "What this tool does"
+   input_schema:
+     type: object
+     properties:
+       param_name:
+         type: string
+         description: "Parameter description"
+     required: [param_name]
+   implementation:
+     type: script
+     path: tools/tool_name.py
+     runtime: python3
+   annotations:
+     read_only: true
+     idempotent: true
+   ```
+   Generate one tool YAML for each tool: {', '.join(f'tools/{t}.yaml' for t in tool_yaml_names)}
 """
 
     if refinement_request:
@@ -292,34 +370,38 @@ _CODE_GEN_JSON_FOOTER = """
 CRITICAL OUTPUT FORMAT — FOLLOW EXACTLY
 ═══════════════════════════════════════════════════════════════════
 
-Use this EXACT delimiter format. Do NOT use JSON for file content (escaping breaks it).
+Use this EXACT delimiter format. Do NOT use JSON for file content.
 
 Step 1: Output a metadata JSON block:
 ---META_START---
 {
   "summary": "2-3 sentence description of what was generated",
-  "next_steps": ["pip install -r requirements.txt", "cp .env.example .env", "python agent.py"],
+  "next_steps": ["pip install -r requirements.txt", "cp .env.example .env", "gitagent validate", "python agent.py"],
   "error": null
 }
 ---META_END---
 
-Step 2: For each file, use this delimiter format:
+Step 2: For EVERY file, use this delimiter format:
 ---FILE_START: agent.py---
-# full file content here
-from lyzr import Studio
-import os
-# ... rest of code ...
+# file content here
 ---FILE_END---
 
----FILE_START: tools/order_lookup.py---
-# tool code here
-def order_lookup(order_id: str) -> str:
-    ...
----FILE_END---
+Step 3: Repeat for ALL files. You MUST output ALL of these:
 
-Step 3: Repeat ---FILE_START: path--- ... ---FILE_END--- for every file.
+LYZR ADK FILES:
+  agent.py
+  tools/<tool_name>.py        (one per tool)
+  requirements.txt
+  .env.example
+  README.md
 
-Files to generate: agent.py, tools/*.py, requirements.txt, .env.example, README.md
+GITAGENT SPEC FILES (required for portability):
+  agent.yaml                         (spec-compliant — see schema rules above)
+  SOUL.md                            (agent identity, plain markdown)
+  RULES.md                           (hard constraints, plain markdown)
+  skills/<skill-name>/SKILL.md       (one per skill — YAML frontmatter required, all values MUST be strings)
+  tools/<tool-name>.yaml             (one per tool — MCP input_schema format)
 
-NEVER put file content inside JSON. ALWAYS use the ---FILE_START/END--- delimiters.
+NEVER put file content inside JSON. ALWAYS use ---FILE_START/END--- delimiters.
+Output ALL files — Lyzr ADK code AND GitAgent spec files together.
 """

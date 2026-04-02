@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Builder — agent-for-agents</title>
+
+<!-- React + Babel CDN (no build step) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- highlight.js for syntax highlighting -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+<style>
+  /* ── Reset & base ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:          #1a1a1a;
+    --surface:     #242424;
+    --surface-2:   #2e2e2e;
+    --surface-3:   #383838;
+    --border:      #3a3a3a;
+    --border-soft: #2a2a2a;
+    --text:        #ececec;
+    --text-muted:  #888;
+    --text-dim:    #555;
+    --purple:      #8b5cf6;
+    --purple-dim:  #6d3fd6;
+    --purple-glow: rgba(139,92,246,0.15);
+    --purple-soft: rgba(139,92,246,0.08);
+    --green:       #34d399;
+    --amber:       #fbbf24;
+    --red:         #f87171;
+    --blue:        #60a5fa;
+    --radius:      10px;
+    --radius-sm:   6px;
+    --font-mono:   'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 52px; min-height: 52px;
+    background: var(--surface); border-bottom: 1px solid var(--border-soft);
+    z-index: 10;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--purple), #a78bfa);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .logo-text { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .logo-sub  { font-size: 12px; color: var(--text-muted); margin-left: 4px; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .badge {
+    padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    border: 1px solid var(--border);
+  }
+  .badge-purple { color: #a78bfa; border-color: rgba(139,92,246,0.3); background: var(--purple-soft); }
+  .badge-green  { color: var(--green); border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.06); }
+  .badge-amber  { color: var(--amber); border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.06); }
+  .badge-red    { color: var(--red);   border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.06); }
+
+  .workspace {
+    flex: 1; display: flex; min-height: 0;
+  }
+
+  /* ── Left panel — projects sidebar ──────────────────────────────────── */
+  .sidebar {
+    width: 220px; min-width: 220px;
+    background: var(--surface); border-right: 1px solid var(--border-soft);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 14px 16px 10px; display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .sidebar-title { font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted); }
+  .btn-icon {
+    width: 26px; height: 26px; border-radius: var(--radius-sm);
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer; display: flex;
+    align-items: center; justify-content: center; font-size: 16px;
+    transition: all 0.15s;
+  }
+  .btn-icon:hover { background: var(--surface-2); color: var(--text); border-color: var(--purple); }
+
+  .project-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .project-item {
+    padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer;
+    transition: background 0.12s; margin-bottom: 2px;
+    border: 1px solid transparent;
+  }
+  .project-item:hover   { background: var(--surface-2); }
+  .project-item.active  { background: var(--purple-soft); border-color: rgba(139,92,246,0.25); }
+  .project-name { font-size: 13px; font-weight: 500; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .project-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px;
+    display: flex; align-items: center; gap: 6px; }
+  .project-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Chat panel ──────────────────────────────────────────────────────── */
+  .chat-panel {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+    background: var(--bg); border-right: 1px solid var(--border-soft);
+  }
+  .chat-panel-header {
+    padding: 14px 20px; border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface);
+  }
+  .chat-title { font-size: 13px; font-weight: 600; }
+  .chat-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    color: var(--text-muted); text-align: center; padding: 40px;
+  }
+  .empty-icon { font-size: 40px; opacity: 0.5; }
+  .empty-title { font-size: 18px; font-weight: 600; color: var(--text); }
+  .empty-desc  { font-size: 13px; max-width: 300px; line-height: 1.7; }
+
+  /* Message bubbles */
+  .msg { display: flex; gap: 10px; animation: fadeUp 0.2s ease; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .msg-user { flex-direction: row-reverse; }
+
+  .msg-avatar {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+  }
+  .avatar-agent { background: linear-gradient(135deg, var(--purple), #a78bfa); }
+  .avatar-user  { background: var(--surface-3); color: var(--text-muted); }
+
+  .msg-body { max-width: 75%; display: flex; flex-direction: column; gap: 4px; }
+  .msg-user .msg-body { align-items: flex-end; }
+
+  .msg-bubble {
+    padding: 10px 14px; border-radius: var(--radius);
+    line-height: 1.65; font-size: 13.5px;
+  }
+  .bubble-agent {
+    background: var(--surface); border: 1px solid var(--border-soft);
+    border-bottom-left-radius: 3px; color: var(--text);
+  }
+  .bubble-user {
+    background: var(--purple); border-bottom-right-radius: 3px; color: #fff;
+  }
+  .msg-time { font-size: 10px; color: var(--text-dim); }
+
+  /* Typing indicator */
+  .typing { display: flex; gap: 4px; padding: 12px 14px; align-items: center; }
+  .dot-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted);
+    animation: pulse 1.2s infinite; }
+  .dot-pulse:nth-child(2) { animation-delay: 0.2s; }
+  .dot-pulse:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); } }
+
+  /* Input area */
+  .input-area {
+    padding: 14px 20px; background: var(--surface);
+    border-top: 1px solid var(--border-soft);
+  }
+  .input-row {
+    display: flex; gap: 10px; align-items: flex-end;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 14px;
+    transition: border-color 0.15s;
+  }
+  .input-row:focus-within { border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-glow); }
+
+  textarea {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text); font-size: 13.5px; resize: none; font-family: inherit;
+    max-height: 120px; line-height: 1.5;
+  }
+  textarea::placeholder { color: var(--text-dim); }
+
+  .btn-send {
+    width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
+    background: var(--purple); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; color: #fff; font-size: 16px;
+  }
+  .btn-send:hover   { background: var(--purple-dim); }
+  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .input-hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; text-align: center; }
+
+  /* Action bar above input */
+  .action-bar {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .btn-action {
+    padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text-muted); transition: all 0.15s; display: flex; align-items: center; gap: 5px;
+  }
+  .btn-action:hover { border-color: var(--purple); color: var(--text); background: var(--purple-soft); }
+  .btn-action.primary {
+    background: var(--purple); color: #fff; border-color: var(--purple);
+  }
+  .btn-action.primary:hover { background: var(--purple-dim); }
+  .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Right panel — builder / files ───────────────────────────────────── */
+  .right-panel {
+    width: 480px; min-width: 380px; max-width: 560px;
+    display: flex; flex-direction: column;
+    background: var(--surface); border-left: 1px solid var(--border-soft);
+  }
+  .right-panel-header {
+    padding: 14px 18px; border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .right-tabs { display: flex; gap: 2px; }
+  .tab {
+    padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
+    cursor: pointer; color: var(--text-muted); transition: all 0.12s; border: none;
+    background: transparent;
+  }
+  .tab.active { background: var(--surface-3); color: var(--text); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .right-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── Builder animation panel ─────────────────────────────────────────── */
+  .builder-panel { flex: 1; overflow-y: auto; padding: 20px; }
+
+  .build-idle {
+    height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    color: var(--text-muted); text-align: center; padding: 30px;
+  }
+  .build-idle-icon { font-size: 48px; opacity: 0.25; }
+  .build-idle-text { font-size: 13px; max-width: 240px; line-height: 1.7; }
+
+  /* Progress steps */
+  .build-steps { display: flex; flex-direction: column; gap: 0; }
+
+  .build-step {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 0; position: relative;
+  }
+  .build-step:not(:last-child)::after {
+    content: ''; position: absolute; left: 15px; top: 36px;
+    width: 2px; height: calc(100% - 24px);
+    background: var(--border-soft);
+  }
+  .build-step.done::after   { background: rgba(52,211,153,0.3); }
+  .build-step.active::after { background: linear-gradient(var(--purple), var(--border-soft)); }
+
+  .step-icon {
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; position: relative; z-index: 1;
+  }
+  .step-icon.pending { background: var(--surface-2); border: 2px solid var(--border); color: var(--text-dim); }
+  .step-icon.active  { background: var(--purple-glow); border: 2px solid var(--purple);
+    color: var(--purple); animation: stepPulse 1.5s infinite; }
+  .step-icon.done    { background: rgba(52,211,153,0.1); border: 2px solid rgba(52,211,153,0.4);
+    color: var(--green); }
+  .step-icon.error   { background: rgba(248,113,113,0.1); border: 2px solid rgba(248,113,113,0.4);
+    color: var(--red); }
+  @keyframes stepPulse {
+    0%,100% { box-shadow: 0 0 0 0 var(--purple-glow); }
+    50%      { box-shadow: 0 0 0 6px transparent; }
+  }
+
+  .step-content { flex: 1; padding-top: 4px; }
+  .step-label { font-size: 13px; font-weight: 500; }
+  .step-label.active  { color: var(--text); }
+  .step-label.pending { color: var(--text-muted); }
+  .step-label.done    { color: var(--text); }
+  .step-desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Spinning loader inside icon */
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* File tree (post-generation) */
+  .file-tree { flex: 1; overflow-y: auto; }
+  .file-tree-header {
+    padding: 10px 18px; border-bottom: 1px solid var(--border-soft);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .file-group { padding: 6px 0; }
+  .file-group-label {
+    padding: 4px 18px; font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--text-dim);
+  }
+  .file-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 18px; cursor: pointer; transition: background 0.1s;
+    font-size: 12.5px;
+  }
+  .file-item:hover  { background: var(--surface-2); }
+  .file-item.active { background: var(--purple-soft); }
+  .file-icon { font-size: 13px; flex-shrink: 0; width: 16px; text-align: center; }
+  .file-name { flex: 1; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-badge {
+    font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
+  }
+  .fb-yaml   { background: rgba(96,165,250,0.15);  color: var(--blue); }
+  .fb-python { background: rgba(139,92,246,0.15);  color: #a78bfa; }
+  .fb-md     { background: rgba(251,191,36,0.15);  color: var(--amber); }
+  .fb-config { background: rgba(52,211,153,0.1);   color: var(--green); }
+  .fb-gitagent { background: rgba(139,92,246,0.25); color: #c4b5fd; }
+
+  /* Code viewer */
+  .code-viewer { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .code-viewer-header {
+    padding: 8px 18px; border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2);
+  }
+  .code-path { font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); }
+  .code-content { flex: 1; overflow-y: auto; }
+  .code-content pre { margin: 0 !important; border-radius: 0 !important;
+    font-size: 12px !important; line-height: 1.6 !important; }
+  .code-content code { font-family: var(--font-mono) !important; }
+
+  /* ── New project modal ───────────────────────────────────────────────── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    animation: fadeIn 0.15s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 28px; width: 420px; max-width: 90vw;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    animation: slideUp 0.2s ease;
+  }
+  @keyframes slideUp { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform: translateY(0); } }
+  .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .modal-desc  { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+  .modal-input {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    color: var(--text); font-size: 14px; outline: none; font-family: inherit;
+    transition: border-color 0.15s;
+  }
+  .modal-input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-glow); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .btn-ghost {
+    padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); transition: all 0.15s;
+  }
+  .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+  .btn-primary {
+    padding: 8px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; background: var(--purple); color: #fff; transition: all 0.15s;
+  }
+  .btn-primary:hover { background: var(--purple-dim); }
+
+  /* scrollbars */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+
+  /* toast */
+  .toast-container { position: fixed; bottom: 20px; right: 20px; display: flex;
+    flex-direction: column; gap: 8px; z-index: 200; }
+  .toast {
+    padding: 10px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+    background: var(--surface-2); border: 1px solid var(--border);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); animation: slideIn 0.2s ease;
+    display: flex; align-items: center; gap: 8px; max-width: 340px;
+  }
+  @keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
+  .toast-success { border-color: rgba(52,211,153,0.3); color: var(--green); }
+  .toast-error   { border-color: rgba(248,113,113,0.3); color: var(--red); }
+  .toast-info    { border-color: rgba(139,92,246,0.3);  color: #a78bfa; }
+
+  /* Diagram in chat */
+  .diagram-container {
+    margin-top: 10px; background: var(--surface-2); border-radius: var(--radius);
+    border: 1px solid var(--border-soft); overflow: hidden;
+  }
+  .diagram-label {
+    padding: 6px 12px; font-size: 11px; color: var(--text-muted);
+    border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .diagram-container img { width: 100%; height: auto; display: block; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const API = 'http://localhost:8000';
+
+// ── helpers ────────────────────────────────────────────────────────────────
+const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function statusColor(s) {
+  return { gathering:'var(--purple)', designing:'var(--blue)',
+           generating:'var(--amber)', generated:'var(--green)',
+           approved:'var(--green)' }[s] || 'var(--text-dim)';
+}
+
+function fileIcon(path) {
+  if (path.endsWith('.py'))        return '🐍';
+  if (path.endsWith('.yaml') || path.endsWith('.yml')) return '📋';
+  if (path.endsWith('.md'))        return '📝';
+  if (path.endsWith('.txt'))       return '📄';
+  if (path.endsWith('.example') || path.endsWith('.env')) return '⚙️';
+  if (path === 'SOUL.md')          return '✨';
+  if (path === 'RULES.md')         return '🛡️';
+  return '📄';
+}
+
+function fileBadge(path) {
+  if (path === 'agent.yaml')                       return ['gitagent', 'GitAgent'];
+  if (path === 'SOUL.md' || path === 'RULES.md')   return ['gitagent', 'GitAgent'];
+  if (path.startsWith('skills/') && path.endsWith('SKILL.md')) return ['gitagent', 'GitAgent'];
+  if (path.startsWith('tools/') && path.endsWith('.yaml'))     return ['yaml', 'YAML'];
+  if (path.endsWith('.py'))                        return ['python', 'Python'];
+  if (path.endsWith('.md'))                        return ['md', 'Markdown'];
+  return ['config', 'Config'];
+}
+
+function groupFiles(files) {
+  const groups = { 'GitAgent Spec': [], 'Lyzr ADK Code': [], 'Config & Docs': [] };
+  for (const f of files) {
+    const p = f.path;
+    if (p === 'agent.yaml' || p === 'SOUL.md' || p === 'RULES.md' ||
+        p.startsWith('skills/') || (p.startsWith('tools/') && p.endsWith('.yaml'))) {
+      groups['GitAgent Spec'].push(f);
+    } else if (p.endsWith('.py')) {
+      groups['Lyzr ADK Code'].push(f);
+    } else {
+      groups['Config & Docs'].push(f);
+    }
+  }
+  return groups;
+}
+
+// ── Build steps definition ────────────────────────────────────────────────
+const GENERATION_STEPS = [
+  { id: 'start',    label: 'Starting generation',         desc: 'Initialising CodeGeneratorAgent'         },
+  { id: 'lyzr',     label: 'Writing Lyzr ADK code',      desc: 'agent.py + tools + requirements.txt'     },
+  { id: 'gitagent', label: 'Writing GitAgent spec',       desc: 'agent.yaml + SOUL.md + RULES.md'         },
+  { id: 'skills',   label: 'Writing skills & tools',      desc: 'skills/*/SKILL.md + tools/*.yaml'        },
+  { id: 'validate', label: 'Packaging artifacts',         desc: 'Saving files + building ZIP'             },
+  { id: 'done',     label: 'Generation complete',         desc: 'Ready to download'                       },
+];
+
+// ── Toast component ────────────────────────────────────────────────────────
+function Toasts({ toasts }) {
+  return (
+    <div className="toast-container">
+      {toasts.map(t => (
+        <div key={t.id} className={`toast toast-${t.kind}`}>
+          {t.kind === 'success' ? '✓' : t.kind === 'error' ? '✗' : 'ℹ'} {t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── New project modal ──────────────────────────────────────────────────────
+function NewProjectModal({ onClose, onCreate }) {
+  const [name, setName] = useState('');
+  const ref = useRef();
+  useEffect(() => ref.current?.focus(), []);
+
+  const submit = () => { if (name.trim()) onCreate(name.trim()); };
+  const onKey = e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">New Agent Project</div>
+        <div className="modal-desc">
+          Give your agent a name — the AI will ask what it should do next.
+        </div>
+        <input
+          ref={ref}
+          className="modal-input"
+          placeholder="e.g. Invoice Processing Agent"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={onKey}
+        />
+        <div className="modal-actions">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={!name.trim()}>
+            Create Project
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Builder animation panel ────────────────────────────────────────────────
+function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) {
+  const [stepIdx, setStepIdx]   = useState(-1);
+  const [stepState, setStepState] = useState({});   // id → 'pending'|'active'|'done'|'error'
+  const [files, setFiles]       = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [activeTab, setActiveTab] = useState('builder'); // 'builder'|'files'
+  const isGenerating = status === 'generating';
+  const isDone       = status === 'generated' || status === 'approved';
+
+  // Animate steps while generating
+  useEffect(() => {
+    if (!isGenerating) return;
+    setStepState({});
+    setStepIdx(0);
+
+    const delays = [0, 1200, 3000, 5500, 8500, null]; // null = wait for completion
+    const timers = [];
+
+    GENERATION_STEPS.forEach((step, i) => {
+      if (delays[i] === null) return; // driven by polling
+      const t = setTimeout(() => {
+        setStepState(prev => {
+          const next = { ...prev };
+          if (i > 0) next[GENERATION_STEPS[i-1].id] = 'done';
+          next[step.id] = 'active';
+          return next;
+        });
+        setStepIdx(i);
+      }, delays[i]);
+      timers.push(t);
+    });
+
+    return () => timers.forEach(clearTimeout);
+  }, [isGenerating]);
+
+  // Mark all done when generation completes
+  useEffect(() => {
+    if (genJob?.status === 'completed') {
+      setStepState(() => Object.fromEntries(GENERATION_STEPS.map(s => [s.id, 'done'])));
+      setStepIdx(GENERATION_STEPS.length);
+      setActiveTab('files');
+      loadFiles();
+    }
+    if (genJob?.status === 'failed') {
+      setStepState(prev => {
+        const next = { ...prev };
+        const active = GENERATION_STEPS.find(s => next[s.id] === 'active');
+        if (active) next[active.id] = 'error';
+        return next;
+      });
+    }
+  }, [genJob?.status]);
+
+  // Load files when switching to files tab and done
+  useEffect(() => {
+    if (activeTab === 'files' && isDone && files.length === 0) loadFiles();
+  }, [activeTab, isDone]);
+
+  async function loadFiles() {
+    if (!projectId) return;
+    try {
+      const r = await fetch(`${API}/projects/${projectId}/files`);
+      const data = await r.json();
+      setFiles(data);
+      if (data.length > 0) setSelectedFile(data[0]);
+      if (onFilesLoaded) onFilesLoaded(data);
+    } catch {}
+  }
+
+  function stateOf(step) { return stepState[step.id] || 'pending'; }
+
+  const stepIcon = (s) => {
+    if (s === 'active')  return <span className="spin">⟳</span>;
+    if (s === 'done')    return '✓';
+    if (s === 'error')   return '✗';
+    return '○';
+  };
+
+  const fileGroups = groupFiles(files);
+  const [badge, badgeLabel] = selectedFile ? fileBadge(selectedFile.path) : ['',''];
+
+  // Highlight code on file select
+  useEffect(() => {
+    if (selectedFile) setTimeout(() => hljs.highlightAll(), 50);
+  }, [selectedFile]);
+
+  const downloadZip = async () => {
+    const r = await fetch(`${API}/projects/${projectId}/download`);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = 'agent-gitagent-package.zip'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="right-panel">
+      <div className="right-panel-header">
+        <div className="right-tabs">
+          <button className={`tab ${activeTab==='builder'?'active':''}`} onClick={() => setActiveTab('builder')}>
+            ⚡ Builder
+          </button>
+          <button className={`tab ${activeTab==='files'?'active':''}`} onClick={() => setActiveTab('files')}>
+            📁 Files {files.length > 0 && `(${files.length})`}
+          </button>
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          {isDone && (
+            <button className="btn-action primary" onClick={downloadZip} style={{fontSize:11,padding:'4px 10px'}}>
+              ⬇ Download ZIP
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="right-body">
+        {activeTab === 'builder' && (
+          <div className="builder-panel">
+            {!isGenerating && !isDone && (
+              <div className="build-idle">
+                <div className="build-idle-icon">🏗</div>
+                <div style={{fontWeight:600,fontSize:14,color:'var(--text)'}}>
+                  Waiting for requirements
+                </div>
+                <div className="build-idle-text">
+                  Complete the conversation with the agent, then hit{' '}
+                  <strong style={{color:'var(--purple)'}}>Generate Agent</strong>{' '}
+                  to produce a full GitAgent-compliant package.
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:8,width:'100%',maxWidth:280}}>
+                  {GENERATION_STEPS.map(s => (
+                    <div key={s.id} style={{
+                      display:'flex',alignItems:'center',gap:8,
+                      padding:'7px 12px',borderRadius:8,
+                      background:'var(--surface-2)',
+                      border:'1px solid var(--border-soft)',
+                    }}>
+                      <span style={{color:'var(--text-dim)',fontSize:12}}>{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(isGenerating || isDone) && (
+              <div className="build-steps">
+                {GENERATION_STEPS.map((step) => {
+                  const s = stateOf(step);
+                  return (
+                    <div key={step.id} className={`build-step ${s}`}>
+                      <div className={`step-icon ${s}`}>{stepIcon(s)}</div>
+                      <div className="step-content">
+                        <div className={`step-label ${s}`}>{step.label}</div>
+                        <div className="step-desc">{step.desc}</div>
+                        {s === 'done' && step.id === 'done' && genJob?.files && (
+                          <div style={{marginTop:6,display:'flex',flexWrap:'wrap',gap:4}}>
+                            {genJob.files.slice(0,6).map(f => (
+                              <span key={f} className="badge badge-green" style={{fontSize:10}}>
+                                {f.split('/').pop()}
+                              </span>
+                            ))}
+                            {genJob.files.length > 6 && (
+                              <span className="badge" style={{fontSize:10}}>+{genJob.files.length-6} more</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {isDone && genJob?.message && (
+                  <div style={{
+                    marginTop:16,padding:'12px 14px',
+                    background:'rgba(52,211,153,0.06)',
+                    border:'1px solid rgba(52,211,153,0.2)',
+                    borderRadius:8,fontSize:12.5,color:'var(--text)',lineHeight:1.6,
+                  }}>
+                    <div style={{color:'var(--green)',fontWeight:600,marginBottom:4}}>✓ Generation complete</div>
+                    {genJob.message}
+                  </div>
+                )}
+
+                {isDone && genJob?.next_steps?.length > 0 && (
+                  <div style={{marginTop:12,padding:'12px 14px',
+                    background:'var(--surface-2)',border:'1px solid var(--border-soft)',borderRadius:8}}>
+                    <div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',
+                      letterSpacing:'0.08em',color:'var(--text-muted)',marginBottom:8}}>
+                      Next steps
+                    </div>
+                    {genJob.next_steps.map((s,i) => (
+                      <div key={i} style={{display:'flex',gap:8,alignItems:'flex-start',
+                        marginBottom:4,fontSize:12}}>
+                        <span style={{color:'var(--purple)',fontWeight:600}}>{i+1}.</span>
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:11.5,color:'var(--text)'}}>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {genJob?.status === 'failed' && (
+                  <div style={{marginTop:16,padding:'12px 14px',
+                    background:'rgba(248,113,113,0.06)',
+                    border:'1px solid rgba(248,113,113,0.2)',
+                    borderRadius:8,fontSize:12.5,color:'var(--red)'}}>
+                    ✗ Generation failed — {genJob.message}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'files' && (
+          <div style={{display:'flex',flex:1,overflow:'hidden',flexDirection:'column'}}>
+            {files.length === 0 ? (
+              <div className="build-idle">
+                <div className="build-idle-icon">📭</div>
+                <div className="build-idle-text">No files yet — generate the agent first.</div>
+              </div>
+            ) : (
+              <>
+                <div className="file-tree-header">
+                  <span>Generated Files</span>
+                  <span style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>
+                    {files.length} files
+                  </span>
+                </div>
+                <div style={{display:'flex',flex:1,overflow:'hidden'}}>
+                  {/* File tree */}
+                  <div style={{width:200,minWidth:180,borderRight:'1px solid var(--border-soft)',
+                    overflow:'hidden auto',flexShrink:0}}>
+                    {Object.entries(fileGroups).map(([group, gfiles]) => (
+                      gfiles.length > 0 && (
+                        <div key={group} className="file-group">
+                          <div className="file-group-label">{group}</div>
+                          {gfiles.map(f => {
+                            const [badge] = fileBadge(f.path);
+                            return (
+                              <div key={f.path}
+                                className={`file-item ${selectedFile?.path===f.path?'active':''}`}
+                                onClick={() => setSelectedFile(f)}
+                              >
+                                <span className="file-icon">{fileIcon(f.path)}</span>
+                                <span className="file-name">{f.path.split('/').pop()}</span>
+                                <span className={`file-badge fb-${badge}`}>{badge==='gitagent'?'GA':badge==='python'?'PY':badge==='yaml'?'YML':badge==='md'?'MD':'CFG'}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
+                    ))}
+                  </div>
+
+                  {/* Code viewer */}
+                  {selectedFile && (
+                    <div className="code-viewer">
+                      <div className="code-viewer-header">
+                        <span className="code-path">{selectedFile.path}</span>
+                        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                          <span className={`file-badge fb-${fileBadge(selectedFile.path)[0]}`}>
+                            {fileBadge(selectedFile.path)[1]}
+                          </span>
+                          <span style={{fontSize:11,color:'var(--text-dim)'}}>
+                            {selectedFile.content?.length || 0} chars
+                          </span>
+                        </div>
+                      </div>
+                      <div className="code-content" key={selectedFile.path}>
+                        <pre><code className={
+                          selectedFile.path.endsWith('.py') ? 'language-python' :
+                          selectedFile.path.endsWith('.yaml') || selectedFile.path.endsWith('.yml') ? 'language-yaml' :
+                          selectedFile.path.endsWith('.md') ? 'language-markdown' : 'language-plaintext'
+                        }>{selectedFile.content}</code></pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────
+function App() {
+  const [projects,       setProjects]      = useState([]);
+  const [activeProject,  setActiveProject] = useState(null);
+  const [messages,       setMessages]      = useState([]);
+  const [input,          setInput]         = useState('');
+  const [sending,        setSending]       = useState(false);
+  const [showNewModal,   setShowNewModal]  = useState(false);
+  const [genJob,         setGenJob]        = useState(null);
+  const [toasts,         setToasts]        = useState([]);
+  const [polling,        setPolling]       = useState(false);
+  const messagesEndRef = useRef(null);
+  const textareaRef    = useRef(null);
+
+  // Derived
+  const status = activeProject?.status || 'gathering';
+  const canGenerate = ['designing','gathering'].includes(status) &&
+    activeProject?.conversation_state === 'architecture' ||
+    activeProject?.conversation_state === 'complete';
+  const isGenerating = status === 'generating';
+
+  useEffect(() => { loadProjects(); }, []);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // Poll generation status while generating
+  useEffect(() => {
+    if (!isGenerating || !activeProject) return;
+    setPolling(true);
+    let cancelled = false;
+
+    async function poll() {
+      while (!cancelled) {
+        await sleep(1800);
+        if (cancelled) break;
+        try {
+          const r = await fetch(`${API}/projects/${activeProject.project_id}/generate/status`);
+          const job = await r.json();
+          setGenJob(job);
+          if (job.status === 'completed' || job.status === 'failed') {
+            // Refresh project
+            const pr = await fetch(`${API}/projects/${activeProject.project_id}`);
+            const p = await pr.json();
+            setActiveProject(p);
+            setProjects(prev => prev.map(x => x.project_id === p.project_id ? p : x));
+            if (job.status === 'completed') {
+              toast('Agent generated — GitAgent + Lyzr ADK files ready!', 'success');
+            } else {
+              toast(job.message || 'Generation failed', 'error');
+            }
+            break;
+          }
+        } catch {}
+      }
+      setPolling(false);
+    }
+    poll();
+    return () => { cancelled = true; };
+  }, [isGenerating, activeProject?.project_id]);
+
+  function toast(msg, kind = 'info') {
+    const id = Date.now();
+    setToasts(t => [...t, { id, msg, kind }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
+  }
+
+  async function loadProjects() {
+    try {
+      const r = await fetch(`${API}/projects`);
+      const data = await r.json();
+      setProjects(data);
+    } catch { toast('Could not reach API — is uvicorn running on :8000?', 'error'); }
+  }
+
+  async function selectProject(p) {
+    setActiveProject(p);
+    setMessages([]);
+    setGenJob(null);
+    // Seed with a system greeting
+    setMessages([{
+      id: 0, role: 'agent',
+      text: `Continuing project "${p.name}". Current status: **${p.status}** — ${p.conversation_state} state.\n\nType a message to continue the conversation.`,
+      time: now(),
+    }]);
+    // Re-hydrate genJob if already done
+    try {
+      const r = await fetch(`${API}/projects/${p.project_id}/generate/status`);
+      const job = await r.json();
+      if (job.status === 'completed' || job.status === 'failed') setGenJob(job);
+    } catch {}
+  }
+
+  async function createProject(name) {
+    setShowNewModal(false);
+    try {
+      const r = await fetch(`${API}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const p = await r.json();
+      setProjects(prev => [p, ...prev]);
+      setActiveProject(p);
+      setGenJob(null);
+      setMessages([{
+        id: 0, role: 'agent',
+        text: `👋 Hi! I'm the Agent Builder. Tell me about the agent you want to build — what problem should it solve, and who will use it?`,
+        time: now(),
+      }]);
+      toast(`Project "${name}" created`, 'success');
+    } catch { toast('Failed to create project', 'error'); }
+  }
+
+  async function sendMessage() {
+    const text = input.trim();
+    if (!text || !activeProject || sending) return;
+    setInput('');
+    setSending(true);
+
+    const userMsg = { id: Date.now(), role: 'user', text, time: now() };
+    setMessages(m => [...m, userMsg]);
+
+    // Typing indicator
+    const typingId = Date.now() + 1;
+    setMessages(m => [...m, { id: typingId, role: 'agent', typing: true, time: now() }]);
+
+    try {
+      const r = await fetch(`${API}/projects/${activeProject.project_id}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await r.json();
+
+      setMessages(m => m.filter(x => x.id !== typingId).concat({
+        id: Date.now() + 2,
+        role: 'agent',
+        text: data.message,
+        diagram: data.diagram_path,
+        state: data.conversation_state,
+        time: now(),
+      }));
+
+      // Refresh project state
+      const pr = await fetch(`${API}/projects/${activeProject.project_id}`);
+      const p = await pr.json();
+      setActiveProject(p);
+      setProjects(prev => prev.map(x => x.project_id === p.project_id ? p : x));
+
+    } catch (e) {
+      setMessages(m => m.filter(x => x.id !== typingId).concat({
+        id: Date.now() + 2, role: 'agent',
+        text: `⚠️ Error: ${e.message}`, time: now(),
+      }));
+    } finally { setSending(false); }
+  }
+
+  async function triggerGenerate() {
+    if (!activeProject) return;
+    setGenJob({ status: 'running', message: 'Starting...' });
+    try {
+      await fetch(`${API}/projects/${activeProject.project_id}/generate`, { method: 'POST' });
+      // Update project status locally so polling kicks off
+      setActiveProject(p => ({ ...p, status: 'generating' }));
+      setProjects(prev => prev.map(x =>
+        x.project_id === activeProject.project_id ? { ...x, status: 'generating' } : x
+      ));
+      toast('Generating agent — GitAgent + Lyzr ADK files…', 'info');
+    } catch { toast('Failed to start generation', 'error'); }
+  }
+
+  function onKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  // State → human label
+  const stateLabel = {
+    intro:'Intro', requirements:'Requirements',
+    tech:'Tech Stack', details:'Details',
+    review:'Review', architecture:'Architecture', complete:'Complete',
+  }[activeProject?.conversation_state] || '—';
+
+  return (
+    <div className="app">
+      {/* Top bar */}
+      <div className="topbar">
+        <div className="topbar-left">
+          <div className="logo-icon">⚡</div>
+          <span className="logo-text">agent-for-agents</span>
+          <span className="logo-sub">by Lyzr ADK + GitAgent</span>
+        </div>
+        <div className="topbar-right">
+          {activeProject && <>
+            <span className="badge" style={{color:statusColor(status),
+              borderColor:`${statusColor(status)}44`,
+              background:`${statusColor(status)}10`}}>
+              {status}
+            </span>
+            <span className="badge badge-purple">{stateLabel}</span>
+          </>}
+          <span className="badge" style={{color:'var(--text-muted)'}}>v1.0</span>
+        </div>
+      </div>
+
+      <div className="workspace">
+        {/* Sidebar */}
+        <div className="sidebar">
+          <div className="sidebar-header">
+            <span className="sidebar-title">Projects</span>
+            <button className="btn-icon" onClick={() => setShowNewModal(true)} title="New project">＋</button>
+          </div>
+          <div className="project-list">
+            {projects.length === 0 && (
+              <div style={{padding:'20px 12px',textAlign:'center',color:'var(--text-dim)',fontSize:12}}>
+                No projects yet.<br />Click + to start.
+              </div>
+            )}
+            {projects.map(p => (
+              <div key={p.project_id}
+                className={`project-item ${activeProject?.project_id===p.project_id?'active':''}`}
+                onClick={() => selectProject(p)}
+              >
+                <div className="project-name">{p.name || 'Untitled'}</div>
+                <div className="project-meta">
+                  <div className="project-dot" style={{background:statusColor(p.status)}} />
+                  <span>{p.status}</span>
+                  <span>·</span>
+                  <span>{p.conversation_state}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Chat panel */}
+        <div className="chat-panel">
+          <div className="chat-panel-header">
+            {activeProject ? (
+              <>
+                <div>
+                  <div className="chat-title">{activeProject.name}</div>
+                  <div className="chat-subtitle">
+                    Conversation state: <strong style={{color:'var(--purple)'}}>{stateLabel}</strong>
+                    {activeProject.requirements?.problem &&
+                      <> · {activeProject.requirements.problem.slice(0,60)}{activeProject.requirements.problem.length>60?'…':''}</>
+                    }
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div>
+                <div className="chat-title">Agent Builder</div>
+                <div className="chat-subtitle">Select or create a project to begin</div>
+              </div>
+            )}
+          </div>
+
+          {!activeProject ? (
+            <div className="empty-state">
+              <div className="empty-icon">🤖</div>
+              <div className="empty-title">Build an AI Agent</div>
+              <div className="empty-desc">
+                Describe what you want — the agent gathers requirements across 6 conversation states,
+                then generates a complete <strong>GitAgent-compliant</strong> + <strong>Lyzr ADK</strong> package.
+              </div>
+              <button className="btn-action primary" style={{marginTop:4}} onClick={() => setShowNewModal(true)}>
+                ＋ New Project
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="messages">
+                {messages.map(m => (
+                  <div key={m.id} className={`msg ${m.role==='user'?'msg-user':''}`}>
+                    <div className={`msg-avatar ${m.role==='agent'?'avatar-agent':'avatar-user'}`}>
+                      {m.role === 'agent' ? '⚡' : '👤'}
+                    </div>
+                    <div className="msg-body">
+                      {m.typing ? (
+                        <div className="msg-bubble bubble-agent">
+                          <div className="typing">
+                            <div className="dot-pulse" /><div className="dot-pulse" /><div className="dot-pulse" />
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className={`msg-bubble ${m.role==='agent'?'bubble-agent':'bubble-user'}`}
+                            style={{whiteSpace:'pre-wrap'}}>
+                            {m.text}
+                          </div>
+                          {m.diagram && (
+                            <div className="diagram-container">
+                              <div className="diagram-label">🏗 Architecture Diagram</div>
+                              <img src={`${API}/projects/${activeProject.project_id}/artifacts/diagram/architecture.png`}
+                                alt="Architecture diagram" onError={e => e.target.style.display='none'} />
+                            </div>
+                          )}
+                          <div className="msg-time">{m.time}</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="input-area">
+                <div className="action-bar">
+                  <button
+                    className={`btn-action ${canGenerate?'primary':''}`}
+                    disabled={!canGenerate || isGenerating}
+                    onClick={triggerGenerate}
+                    title={canGenerate ? 'Generate GitAgent + Lyzr ADK files' : 'Complete requirement gathering first'}
+                  >
+                    {isGenerating ? <><span className="spin">⟳</span> Generating…</> : '⚡ Generate Agent'}
+                  </button>
+                  {(status === 'generated' || status === 'approved') && (
+                    <button className="btn-action" onClick={async () => {
+                      const r = await fetch(`${API}/projects/${activeProject.project_id}/download`);
+                      const blob = await r.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a'); a.href = url;
+                      a.download = `${activeProject.name}-gitagent.zip`; a.click();
+                      URL.revokeObjectURL(url);
+                    }}>
+                      ⬇ Download ZIP
+                    </button>
+                  )}
+                </div>
+                <div className="input-row">
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    placeholder={sending ? 'Waiting for agent…' : 'Describe your agent or answer the question…'}
+                    value={input}
+                    disabled={sending || isGenerating}
+                    onChange={e => {
+                      setInput(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                    }}
+                    onKeyDown={onKey}
+                  />
+                  <button className="btn-send" disabled={!input.trim() || sending || isGenerating} onClick={sendMessage}>
+                    ➤
+                  </button>
+                </div>
+                <div className="input-hint">Enter to send · Shift+Enter for new line · Complete all 6 states to unlock Generate</div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right panel — builder + files */}
+        <BuilderPanel
+          status={status}
+          genJob={genJob}
+          onGenerate={triggerGenerate}
+          projectId={activeProject?.project_id}
+          onFilesLoaded={() => {}}
+        />
+      </div>
+
+      {showNewModal && <NewProjectModal onClose={() => setShowNewModal(false)} onCreate={createProject} />}
+      <Toasts toasts={toasts} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
