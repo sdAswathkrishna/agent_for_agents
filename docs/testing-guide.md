@@ -1,7 +1,7 @@
-# Agent-for-Agents — End-to-End Manual Testing Guide
+# BuilderAI — Testing Guide
 
-> Follow this guide to experience the full workflow as a real user.
-> Estimated time: 15–20 minutes to complete all paths.
+> Use this guide to test the system end to end, from GitAgent spec validation through to a running generated agent.
+> Estimated time: 20–25 minutes for both paths.
 
 ---
 
@@ -10,229 +10,159 @@
 ```bash
 python >= 3.11
 pip install -r requirements.txt
-npm install -g @open-gitagent/gitagent   # GitAgent CLI
+npm install -g @open-gitagent/gitagent
 cp .env.example .env
 # Add LYZR_API_KEY and OPENAI_API_KEY to .env
 ```
 
 ---
 
-## PATH A — GitAgent CLI (Fastest, ~3 min)
+## PATH A — GitAgent CLI
 
-This is the showcase path. Runs the agent directly through the GitAgent standard
-without touching any Python or API — pure portability proof.
+This path validates the agent spec and proves portability before touching the UI.
 
-### Step 1 — Validate the spec
+### 1. Validate the spec
+
 ```bash
 gitagent validate
 ```
-**Expected output:**
-```
-✓ agent.yaml — valid
-✓ SOUL.md — valid
-✓ tools/generate-diagram.yaml — valid
-✓ tools/get-lyzr-template.yaml — valid
-✓ tools/search-lyzr-docs.yaml — valid
-✓ skills/ — valid
-✓ Validation passed (0 warnings)
-```
 
-### Step 2 — Inspect the agent definition
+Expected: all green checkmarks, `Validation passed (0 warnings)`.
+
+### 2. Inspect the agent
+
 ```bash
 gitagent info
 ```
-Check that model, skills, tools, runtime and Soul preview all appear correctly.
 
-### Step 3 — Run from local directory
+Check that model, skills, tools, runtime, and Soul preview all appear correctly.
+
+### 3. Run from local directory
+
 ```bash
 source .env
 gitagent run -d . -a lyzr -p "I want to build an invoice processing agent for my finance team"
 ```
-**Expected:** Agent responds with `[STATE 1/6: intro]` and asks about purpose + target users.
 
-### Step 4 — Run from GitHub (portability test)
+Expected: Agent responds with `[STATE 1/6: intro]` and starts asking about purpose and target users.
+
+### 4. Run from GitHub
+
 ```bash
 gitagent run -r https://github.com/sdAswathkrishna/agent_for_agents -a lyzr \
   -p "I want to build a Slack bot that monitors CI/CD pipelines"
 ```
-**Expected:** GitAgent clones the repo, reads agent.yaml, connects to Lyzr, and
-starts the same 6-state conversation — from a clean URL with no local files.
 
-### Step 5 — Export to other frameworks
+Expected: GitAgent clones the repo, reads agent.yaml, connects to Lyzr, and starts the same 6-state conversation — from a clean URL with no local files.
+
+### 5. Export to other frameworks
+
 ```bash
-gitagent export --format lyzr          # Lyzr Studio JSON payload
-gitagent export --format claude-code   # CLAUDE.md compatible system prompt
-gitagent export --format system-prompt # Universal flat prompt
-gitagent export --format openai        # OpenAI agents format
-gitagent export --format crewai        # CrewAI agent definition
-gitagent export --format openclaw      # OpenClaw format
+gitagent export --format lyzr
+gitagent export --format claude-code
+gitagent export --format system-prompt
+gitagent export --format openai
+gitagent export --format crewai
+gitagent export --format openclaw
 ```
-**Expected:** Each command outputs a valid definition in the target framework's format.
+
+Expected: each command outputs a valid definition in the target framework's format.
 
 ---
 
-## PATH B — FastAPI (Full Workflow, ~10 min)
+## PATH B — BuilderAI Web UI
 
-This path exercises the complete multi-agent pipeline end to end.
+This path walks through the full workflow using the web interface.
 
-### Step 1 — Start the server
+### 1. Start the server
+
 ```bash
 uvicorn main_api:app --reload --port 8000
 ```
-Open `http://localhost:8000/docs` in a browser — the Swagger UI shows all endpoints.
 
-### Step 2 — Health check
-```bash
-curl http://localhost:8000/health
-```
-**Expected:**
-```json
-{"status": "ok", "framework": "lyzr-adk"}
-```
+### 2. Open the UI
 
-### Step 3 — Create a new project
-```bash
-curl -s -X POST http://localhost:8000/projects \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Customer Support Agent"}' | python3 -m json.tool
-```
-**Expected:** JSON with `project_id`, `status: "gathering"`, `conversation_state: "intro"`.
-Save the `project_id` for the next steps.
+Navigate to `http://localhost:8000/ui/` in your browser. You should see the BuilderAI interface — sidebar on the left, chat panel in the centre, and the Builder panel on the right.
 
-```bash
-PROJECT_ID="<paste project_id here>"
-```
+### 3. Create a new project
 
-### Step 4 — State 1/6: Intro
-```bash
-curl -s -X POST http://localhost:8000/projects/$PROJECT_ID/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "I want a chatbot that answers customer questions from a knowledge base"}' \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('message',''))"
-```
-**Expected:** Questions about purpose and target users.
+Click **New** in the sidebar. Give your agent a name — for example, `Customer Support Agent`. Press Enter or click Create.
 
-### Step 5 — State 2/6: Requirements
-```bash
-curl -s -X POST http://localhost:8000/projects/$PROJECT_ID/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Purpose: reduce support ticket volume. Users: end customers via a web chat widget"}' \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('message',''))"
-```
-**Expected:** Questions about tools and integrations needed.
+### 4. Chat through the requirements
 
-### Step 6 — State 3/6: Tech stack
-```bash
-curl -s -X POST http://localhost:8000/projects/$PROJECT_ID/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Tools: search knowledge base, escalate to human, update ticket status. Integrations: Zendesk"}' \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('message',''))"
-```
-**Expected:** Questions about LLM preference and multi-user setup.
+The agent will greet you and ask about what you want to build. Answer each question naturally. The conversation moves through six stages: intro, requirements, tech stack, details, review, and architecture. A small label in the chat header shows which stage you are in.
 
-### Step 7 — States 4–5: Details + Review
-Continue answering the agent's questions naturally. When the agent presents a summary
-and asks for confirmation, reply:
-```bash
-curl -s -X POST http://localhost:8000/projects/$PROJECT_ID/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Yes, that looks correct. Proceed."}' \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('message',''))"
-```
+For a customer support agent, try answers like:
+- **What it does:** "Answer customer questions from a knowledge base and escalate unresolved issues to a human agent"
+- **Tools needed:** "Search knowledge base, escalate to human, update ticket status"
+- **Integrations:** "Zendesk"
+- **LLM:** "GPT-4o"
+- **Users:** "End customers via a web chat widget"
 
-### Step 8 — State 6/6: Architecture + Generate
-Once the agent signals it's ready (State: architecture), trigger code generation:
-```bash
-curl -s -X POST http://localhost:8000/projects/$PROJECT_ID/generate \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
-**Expected:** `{"status": "started", "message": "Code generation in progress"}`
+Keep answering until the agent presents a full architecture summary.
 
-### Step 9 — Poll until complete
-```bash
-# Run this until status = "completed"
-curl -s http://localhost:8000/projects/$PROJECT_ID/generate/status \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print('status:', d.get('status'))"
-```
-**Expected** (after ~20–30 seconds):
-```
-status: completed
-```
+### 5. Generate the agent
 
-### Step 10 — Inspect generated files
-```bash
-ls artifacts/$PROJECT_ID/
-# agent.py  tools/  requirements.txt  .env.example  README.md
-cat artifacts/$PROJECT_ID/agent.py
-cat artifacts/$PROJECT_ID/tools/*.py
-```
-**Expected:** A complete, runnable Lyzr ADK project targeting the described agent.
+Once the architecture stage is reached, a **Generate Agent** button appears inline in the chat. Click it. The right panel switches to the Builder view and animates through generation steps — initialising, writing tools, assembling the agent, packaging files.
 
-### Step 11 — Download as ZIP
-```bash
-curl -s http://localhost:8000/projects/$PROJECT_ID/download --output generated_agent.zip
-unzip -l generated_agent.zip
-```
+Generation takes around 20–30 seconds.
 
----
+### 6. Review the generated files
 
-## PATH C — CLI Interactive Mode (~5 min)
+When generation completes, the right panel switches automatically to the **Files** tab. Click any file in the tree on the left to view its content. Check that:
 
-The CLI mode gives a conversational, terminal-native experience.
+- `agent.py` contains real Lyzr ADK code — `from lyzr import Studio`, `studio.create_agent(...)`, tool registrations, and a working chat loop
+- `tools/*.py` files contain real implementation code with actual API calls, not placeholder returns or TODO comments
+- `requirements.txt` lists the correct dependencies
+- `agent.yaml`, `SOUL.md`, `RULES.md`, and `skills/*/SKILL.md` files are present
+
+### 7. Download the ZIP
+
+Click the **Download ZIP** button in the top-right corner of the topbar. It is greyed out until generation completes, then turns active. Save and unzip locally.
+
+### 8. Validate the generated spec
 
 ```bash
-python main.py
+cd /path/to/unzipped-agent
+gitagent validate
 ```
 
-Type your agent description and follow the prompts. When all 6 states are complete,
-the CLI will prompt: `Type 'generate' to produce the Lyzr ADK code.`
-
-```
-> generate
-```
-
-The generated files appear in `artifacts/<project_id>/`.
+Expected: 0 errors, 0 warnings.
 
 ---
 
 ## What to Look For
 
-| Checkpoint | What it proves |
-|------------|---------------|
-| `gitagent validate` → 0 warnings | The agent.yaml + SOUL.md + skills + tools are spec-compliant |
-| `gitagent run -r github.com/...` returns a response | Framework-agnostic portability — the GitAgent standard works from a URL |
-| `gitagent export --format openai` produces valid JSON | Same agent definition works in OpenAI Agents format |
-| `/health` returns `"framework": "lyzr-adk"` | Lyzr ADK agents are initialised correctly on startup |
-| `/projects/{id}/generate/status` → `completed` | Both Lyzr ADK agents (Orchestrator + CodeGenerator) completed successfully |
-| `artifacts/` contains `agent.py` + `tools/*.py` | CodeGeneratorAgent produced a complete, multi-file Lyzr ADK project |
-| Generated `agent.py` imports `from lyzr import Studio` | Output is actually valid Lyzr ADK code, not pseudocode |
+**`gitagent validate` passes with 0 warnings** — the agent.yaml, SOUL.md, skills, and tool definitions are all spec-compliant.
 
----
+**`gitagent run -r` returns a response** — GitAgent clones the repo, reads the spec, and starts the conversation from a clean URL. Proves framework-agnostic portability.
 
-## Streaming Test (Bonus)
+**The Generate Agent button appears inline** — only shown after the architecture stage is reached, confirming the OrchestratorAgent FSM advanced through all six states correctly.
 
-```bash
-curl -s -N -X POST http://localhost:8000/projects/$PROJECT_ID/chat/stream \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What tools does this agent need?"}'
-```
-**Expected:** SSE events streaming in real time:
-```
-data: {"type": "token", "content": "Based"}
-data: {"type": "token", "content": " on"}
-...
-data: {"type": "done"}
-```
+**Generation completes and the Files tab populates** — both Lyzr ADK agents (Orchestrator and CodeGenerator) ran successfully end to end.
+
+**`agent.py` imports `from lyzr import Studio`** — the generated code is real Lyzr ADK, not pseudocode or stubs.
+
+**The generated `agent.yaml` passes `gitagent validate`** — the CodeGeneratorAgent is producing spec-compliant GitAgent output, not just Python code.
 
 ---
 
 ## Common Issues & Quick Fixes
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `RuntimeError: This event loop is already running` | Sync/async conflict | Already fixed via ThreadPoolExecutor in main_api.py |
-| Generation status stuck at `running` | CodeGeneratorAgent timeout | Check LYZR_API_KEY and OPENAI_API_KEY in .env |
-| `gitagent run` returns empty response | LYZR_API_KEY not exported | `source .env` before running |
-| `gitagent validate` shows skill errors | SKILL.md missing frontmatter | All SKILL.md files have valid `---` frontmatter — re-pull from repo |
-| KB returns no results (NexaFlow project only) | Score threshold too high | Set `_KB_SCORE_THRESHOLD=0.2` in `agents/chat_agent.py` |
+**`gitagent run` returns an empty response or "No API key" error**
+Source your `.env` before running: `source .env` — or export directly: `export LYZR_API_KEY=sk-...`.
+
+**Generation stays on "Generating…" indefinitely**
+Check that both `LYZR_API_KEY` and `OPENAI_API_KEY` are set correctly in `.env`. Restart the server after any `.env` change.
+
+**Generated tool files contain TODO comments or mock return values**
+The code generator agent was created with old instructions. Remove `LYZR_CODE_GENERATOR_AGENT_ID` from `.env` and restart the server — it will recreate the agent with the updated instructions on startup.
+
+**`gitagent validate` on generated files shows errors**
+Most commonly the `tools` array in `agent.yaml` contains path-style values like `tools/search-knowledge-base.yaml` instead of bare names like `search-knowledge-base`. If you see this, the project was generated before the codegen fix was applied — regenerate it.
+
+**Download ZIP button stays grey**
+Generation has not completed. Check the Builder panel for a failed step and look at the server logs for the root cause.
+
+**`RuntimeError: This event loop is already running`**
+Already fixed via `ThreadPoolExecutor` in `main_api.py`. If you see this, pull the latest from `main`.
