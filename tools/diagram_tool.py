@@ -8,7 +8,7 @@ Fallback chain:
   4. Text stub  — always succeeds, writes a .txt description
 
 Default is local → matplotlib → stub.  Set DIAGRAM_TOOL_MODE=mcp to re-enable
-the AWS Diagrams MCP server path (requires: uvx + awslabs.aws-diagrams-mcp-server).
+the AWS Diagrams MCP server path (requires: uvx + awslabs.aws-diagram-mcp-server).
 
 BUG FIXES vs previous version:
   - Coroutine-never-awaited warning: coroutine must be created INSIDE the
@@ -37,7 +37,7 @@ async def _call_mcp_diagram_server(description: str, output_path: str) -> Option
 
         server_params = StdioServerParameters(
             command="uvx",
-            args=["awslabs.aws-diagrams-mcp-server@latest"],
+            args=["awslabs.aws-diagram-mcp-server@latest"],
             env={**os.environ},
         )
 
