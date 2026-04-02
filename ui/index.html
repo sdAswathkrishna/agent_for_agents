@@ -762,12 +762,6 @@ function BuilderPanel({ status, genJob, projectId, panelWidth }) {
               </div>
             ) : (
               <>
-                <div className="file-tree-header">
-                  <span>Generated Files</span>
-                  <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--text-dim)'}}>
-                    {files.length} files
-                  </span>
-                </div>
                 <div style={{display:'flex',flex:1,overflow:'hidden'}}>
                   {/* Tree */}
                   <div style={{width:188,minWidth:160,borderRight:'1px solid var(--border-soft)',
