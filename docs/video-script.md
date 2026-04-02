@@ -47,20 +47,20 @@ BuilderAI loads — sidebar on the left, clean dark chat panel, Builder panel on
 
 ## [0:35 – 1:20] — Build an Agent Through the UI
 
-**Show:** Click **New** in the sidebar. Type "Weather Agent". Press Enter.
+**Show:** Click **New** in the sidebar. Type "Email Triage Agent". Press Enter.
 
 **Say:**
 > "New project. I'll describe what I need."
 
 **Show:** Type in the chat:
-> "I want an agent that looks up the current weather for any city and tells me whether I need an umbrella."
+> "I want an agent that reads an email and tells me its category, priority level, and what action to take — like an inbox triage assistant."
 
 **Show:** Agent responds with the first question. Continue answering naturally — 3 to 4 exchanges. The stage label at the top of the chat advances: Requirements → Tech Stack → Details → Architecture.
 
 Sample exchange to follow:
-- Agent asks about target users → answer: "Just me, personal use"
+- Agent asks about target users → answer: "Support teams, internal use"
 - Agent asks about tech preferences → answer: "Python, no preference on LLM"
-- Agent asks about data sources → answer: "Use wttr.in — it's a free public API, no key needed"
+- Agent asks about integrations → answer: "None — just paste the email text, no external systems"
 
 **Say:**
 > "The OrchestratorAgent walks through a six-stage requirements conversation.
@@ -84,11 +84,11 @@ Sample exchange to follow:
 
 ## [1:45 – 2:05] — Review Files, Download ZIP
 
-**Show:** Click through the file tree — `agent.py`, `tools/get_weather.py`, `agent.yaml`.
+**Show:** Click through the file tree — `agent.py`, `tools/triage_email.py`, `agent.yaml`.
 
 **Say:**
 > "Real code. Not scaffolding, not stubs.
-> The weather tool makes a real httpx call to wttr.in — no API key, no setup.
+> The triage tool parses the email and returns category, priority, and recommended action — pure Python, no external services.
 > The agent.py has a working chat loop.
 > The GitAgent spec files are here too — agent.yaml, SOUL.md, RULES.md."
 
@@ -98,12 +98,13 @@ Sample exchange to follow:
 
 ## [2:05 – 2:25] — Open in Cursor
 
-**Show:** Open Cursor. Drag the unzipped folder in. Navigate to `agent.py`, then `tools/get_weather.py`.
+**Show:** Open Cursor. Drag the unzipped folder in. Navigate to `agent.py`, then `tools/triage_email.py`.
 
 **Say:**
 > "I can open this directly in Cursor and run it.
-> Real httpx call to wttr.in, JSON parsing, proper error handling.
-> No mocks, no placeholders — this runs immediately."
+> The triage tool is pure Python — keyword extraction, priority scoring, category classification.
+> No external APIs, no credentials, no setup.
+> It runs immediately."
 
 ---
 
@@ -123,13 +124,14 @@ gitagent validate
 **Show:** Run:
 ```bash
 pip install -r requirements.txt
-gitagent run -a lyzr -p "What's the weather in London?"
+gitagent run -a lyzr -p "Triage this email — Subject: Can't log in. Body: I've been locked out of my account since this morning. This is urgent, I have a client call in an hour."
 ```
 
-**Show:** Agent responds with current weather and umbrella recommendation.
+**Show:** Agent responds with category, priority level, and recommended action.
 
 **Say:**
-> "And it runs. One command, no extra setup — the tool hits a live API and the agent answers.
+> "And it runs. No external services, no credentials beyond what's already in the env.
+> The agent reads the email, classifies it, and tells you exactly what to do with it.
 > From the generated spec, against the Lyzr adapter."
 
 ---
@@ -154,7 +156,7 @@ gitagent run -a lyzr -p "What's the weather in London?"
 - [ ] Run `pip install -r requirements.txt` inside the generated folder before recording the run step
 - [ ] Have the unzipped agent folder ready in Cursor before recording (run generation once beforehand so the files are already there)
 - [ ] Have at least one existing project in the BuilderAI sidebar so the UI doesn't look empty at start
-- [ ] Confirm `wttr.in` is reachable (`curl wttr.in/London?format=j1`) before hitting record
+- [ ] Have the sample email text ready to paste — copy it from the script so it's in your clipboard
 - [ ] Silence notifications (Do Not Disturb on)
 - [ ] Record at 1920×1080
 
