@@ -189,13 +189,36 @@ async def chat(project_id: str, body: ChatRequest):
 
     # Copy diagram to project-specific location so it can be served per-project
     if output.diagram_path:
-        import shutil
+        import shutil, re as _re
         from pathlib import Path as _Path
-        default_diagram = _Path("./artifacts/diagram/architecture.png")
-        if default_diagram.exists():
+
+        # Strategy 1: parse "saved to: <path>" from the tool result string
+        src_path: Optional[_Path] = None
+        match = _re.search(r"saved to:\s*(.+\.png)", str(output.diagram_path))
+        if match:
+            candidate = _Path(match.group(1).strip())
+            if candidate.exists():
+                src_path = candidate
+
+        # Strategy 2: try the well-known default path
+        if src_path is None:
+            default = _Path("./artifacts/diagram/architecture.png")
+            if default.exists():
+                src_path = default
+
+        # Strategy 3: glob for any PNG in ./artifacts/diagram/
+        if src_path is None:
+            found = list(_Path("./artifacts/diagram").glob("*.png"))
+            if found:
+                src_path = found[0]
+
+        if src_path is not None:
             dest = artifacts._project_dir(project_id) / "diagram" / "architecture.png"
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(str(default_diagram), str(dest))
+            shutil.copy2(str(src_path), str(dest))
+            print(f"[diagram] Copied {src_path} → {dest}")
+        else:
+            print(f"[diagram] WARNING: diagram_path set but no PNG found (diagram_path={output.diagram_path!r})")
 
     # Update project in DB
     await db.update_project(

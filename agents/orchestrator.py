@@ -339,30 +339,37 @@ You MUST return a valid JSON object every turn with these fields:
 
 {
   "message": "Your full conversational response to the user goes here",
-  "conversation_state": "intro",   // one of: intro, requirements, tech, details, review, architecture, complete
+  "conversation_state": "intro",   // one of: intro, requirements, tech, architecture, complete
   "is_complete": false,            // true ONLY after architecture diagram is generated
-  "diagram_path": null,            // set to diagram file path after generate_diagram() succeeds
+  "diagram_path": null,            // EXACT PATH extracted from generate_diagram() result — see below
   "requirements": {}               // JSON object of all requirements gathered so far (NOT a string)
 }
+
+HOW TO SET diagram_path:
+  - Call generate_diagram() to get a result string.
+  - The result looks like: "[MATPLOTLIB] Diagram saved to: ./artifacts/diagram/architecture.png"
+  - Extract ONLY the file path after "saved to: " — e.g. "./artifacts/diagram/architecture.png"
+  - Set diagram_path to THAT PATH STRING — nothing else, no brackets, no prefix.
+  - If the result starts with "[STUB]", set diagram_path to null.
+  - NEVER invent or guess the path — only use what the tool actually returns.
 
 For the "requirements" field, output a plain JSON OBJECT (not a string) with all
 requirements gathered so far. ALWAYS populate "requirements" after every turn.
 
 Example:
 "requirements": {
-  "problem": "slow order lookup for e-commerce",
-  "target_users": "customer support reps",
-  "tools": ["order_lookup_api", "email_drafting", "zendesk_ticket_creation"],
-  "triggers": ["chat_ui", "api_endpoint"],
-  "tech_stack": "lyzr-adk",
-  "integrations": ["zendesk"]
+  "problem": "email triage for support inbox",
+  "target_users": "support teams",
+  "tools": ["triage_email", "classify_priority"],
+  "triggers": ["chat_ui"],
+  "tech_stack": "lyzr-adk"
 }
 
 Only include fields that have actual values. Omit fields with no data yet.
 
 IMPORTANT:
 - Put your entire user-facing response in the "message" field
-- Keep "conversation_state" as a plain string (one of: intro, requirements, tech, details, review, architecture, complete)
+- Valid conversation_state values: intro, requirements, tech, architecture, complete
 - Set "is_complete": true ONLY after the architecture diagram is generated
 - ALWAYS update "requirements" each turn with the latest cumulative requirements
 - "requirements" must be a JSON object, NOT a quoted string
