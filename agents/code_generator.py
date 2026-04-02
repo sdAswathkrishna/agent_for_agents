@@ -49,8 +49,11 @@ _ENV_PATH    = Path(__file__).parent.parent / ".env"
 
 def _persist_agent_id(env_key: str, agent_id: str) -> None:
     """Persist agent ID to .env so subsequent runs reuse the same agent (no duplicates)."""
+    import re as _re
     env_text = _ENV_PATH.read_text() if _ENV_PATH.exists() else ""
-    if env_key not in env_text:
+    # Only skip if the key exists as an ACTIVE (uncommented) line — not a comment
+    active_pattern = _re.compile(rf"^\s*{_re.escape(env_key)}\s*=", _re.MULTILINE)
+    if not active_pattern.search(env_text):
         with open(_ENV_PATH, "a") as f:
             f.write(f"\n{env_key}={agent_id}\n")
         os.environ[env_key] = agent_id
