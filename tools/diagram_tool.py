@@ -1,54 +1,36 @@
 """
 Diagram generation tool — exposed to OrchestratorAgent via agent.add_tool().
 
-This file is the KEY comparison point between Strands SDK and Lyzr ADK:
-
-  STRANDS: has native MCPClient class with first-class MCP support.
-    from strands.tools.mcp import MCPClient
-    client = MCPClient(lambda: stdio_client(StdioServerParameters(...)))
-    with client:
-        tools = client.list_tools_sync()       # direct tool registration
-        agent = Agent(model=model, tools=tools) # MCP tools injected natively
-
-  LYZR ADK: no native MCP client. Must bridge manually:
-    1. Use the `mcp` Python library to spawn an MCP subprocess
-    2. Wrap the result as a regular Python function
-    3. Pass the function via agent.add_tool()
-
-  FINDINGS (documented for comparison.md):
-    - Lyzr CAN use MCP servers but requires ~30 lines of bridge code per tool
-    - Strands registers all MCP tools in one line (list_tools_sync())
-    - Lyzr's approach is more explicit but more work; Strands is more ergonomic
-    - Both approaches work in production; Strands has a clear DX advantage here
-
 Fallback chain:
-  1. MCP mode   → spawn awslabs.aws-diagrams-mcp-server@latest via uvx
-  2. Local mode → use Python `diagrams` library directly
-  3. Stub mode  → return text description (diagrams lib not installed)
+  1. MCP mode   — only when DIAGRAM_TOOL_MODE=mcp AND uvx+package are available
+  2. Local mode — Python `diagrams` library (requires graphviz system package)
+  3. Matplotlib — pure-Python PNG fallback (no system deps)
+  4. Text stub  — always succeeds, writes a .txt description
+
+Default is local → matplotlib → stub.  Set DIAGRAM_TOOL_MODE=mcp to re-enable
+the AWS Diagrams MCP server path (requires: uvx + awslabs.aws-diagrams-mcp-server).
+
+BUG FIXES vs previous version:
+  - Coroutine-never-awaited warning: coroutine must be created INSIDE the
+    ThreadPoolExecutor thread (via lambda), not in the calling thread.
+  - MCP package not available: default is now "local", not "mcp".
+  - asyncio.run() inside uvicorn event loop: caught and routed to thread pool.
 """
 
 import os
 import json
 import asyncio
-import tempfile
-import subprocess
+import textwrap
 from pathlib import Path
 from typing import Optional
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MCP bridge — manually calling an MCP stdio server from Lyzr ADK
-# This is the "bridge pattern" that compensates for Lyzr's missing MCPClient
+# MCP bridge — only used when DIAGRAM_TOOL_MODE=mcp
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _call_mcp_diagram_server(description: str, output_path: str) -> Optional[str]:
-    """
-    Bridge: spawn the AWS Diagrams MCP server, call generate_diagram, return path.
-
-    NOTE: In Strands this would be automatic via:
-        MCPClient(lambda: stdio_client(StdioServerParameters(command="uvx", args=[...])))
-    In Lyzr ADK we must do it manually using the mcp library.
-    """
+    """Spawn the AWS Diagrams MCP server and call generate_diagram."""
     try:
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
@@ -62,165 +44,275 @@ async def _call_mcp_diagram_server(description: str, output_path: str) -> Option
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-
-                # List available tools (mirrors Strands list_tools_sync())
                 tools_result = await session.list_tools()
-                tool_names = [t.name for t in tools_result.tools]
-
-                if "generate_diagram" not in tool_names:
+                if "generate_diagram" not in [t.name for t in tools_result.tools]:
                     return None
 
                 result = await session.call_tool(
                     "generate_diagram",
-                    arguments={
-                        "description": description,
-                        "output_path": output_path,
-                    },
+                    arguments={"description": description, "output_path": output_path},
                 )
 
-                # Extract content
                 if result.content:
                     for block in result.content:
+                        if hasattr(block, "data"):
+                            import base64
+                            with open(output_path, "wb") as f:
+                                f.write(base64.b64decode(block.data))
+                            return output_path
                         if hasattr(block, "text"):
                             return block.text
-                        if hasattr(block, "data"):   # base64 image
-                            import base64
-                            img_bytes = base64.b64decode(block.data)
-                            with open(output_path, "wb") as f:
-                                f.write(img_bytes)
-                            return output_path
 
-    except FileNotFoundError:
-        # uvx not installed — expected in many environments
-        return None
     except Exception as e:
         print(f"[diagram_tool] MCP server error: {e}")
+
+    return None
+
+
+def _try_mcp(description: str, output_path: str) -> Optional[str]:
+    """
+    Run the MCP async call safely regardless of whether there's a running event loop.
+
+    FIX: coroutine must be created INSIDE the thread (via lambda), not passed as
+    an already-created coroutine object.  Creating it outside and passing it to
+    asyncio.run() in another thread raises 'coroutine was never awaited' when the
+    outer call errors before asyncio.run() gets to schedule it.
+    """
+    try:
+        asyncio.get_running_loop()
+        # Running inside uvicorn/FastAPI event loop — must use a thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                lambda: asyncio.run(_call_mcp_diagram_server(description, output_path))
+            )
+            return future.result(timeout=30)
+    except RuntimeError:
+        # No running event loop — safe to call asyncio.run() directly
+        return asyncio.run(_call_mcp_diagram_server(description, output_path))
+    except Exception as e:
+        print(f"[diagram_tool] MCP bridge error: {e}")
         return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Local fallback — Python diagrams library (requires graphviz)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _try_diagrams_library(description: str, output_path: str) -> Optional[str]:
+    """Generate PNG via the `diagrams` library.  Returns None if not installed."""
+    try:
+        from diagrams import Diagram, Cluster
+        from diagrams.aws.compute import Lambda
+        from diagrams.aws.database import Dynamodb
+        from diagrams.aws.storage import S3
+        from diagrams.aws.network import APIGateway
+        from diagrams.onprem.client import User
+
+        desc_lower = description.lower()
+        output_dir  = str(Path(output_path).parent)
+        output_stem = Path(output_path).stem
+
+        with Diagram(
+            "Agent Architecture",
+            filename=str(Path(output_dir) / output_stem),
+            outformat="png",
+            show=False,
+        ):
+            user = User("User")
+            with Cluster("Agents"):
+                main_agent = Lambda("Agent")
+
+            nodes = [main_agent]
+
+            if "dynamodb" in desc_lower or "database" in desc_lower:
+                nodes.append(Dynamodb("DynamoDB"))
+            if "s3" in desc_lower or "storage" in desc_lower:
+                nodes.append(S3("S3"))
+            if "api" in desc_lower or "gateway" in desc_lower:
+                api = APIGateway("API Gateway")
+                user >> api >> main_agent
+            else:
+                user >> main_agent
+
+        final_path = str(Path(output_dir) / f"{output_stem}.png")
+        if Path(final_path).exists():
+            return final_path
+
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"[diagram_tool] diagrams library error: {e}")
 
     return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Local fallback — Python diagrams library
+# Matplotlib fallback — pure Python, no system deps
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _generate_diagram_local(description: str, output_path: str) -> str:
+def _try_matplotlib(description: str, output_path: str) -> Optional[str]:
     """
-    Fallback: generate architecture diagram using the Python `diagrams` library.
-    Parses key AWS service mentions from the description and renders a PNG.
+    Render a simple architecture PNG using matplotlib.
+    No system packages required — matplotlib is already a common dep.
     """
     try:
-        from diagrams import Diagram, Cluster
-        from diagrams.aws.compute import Lambda
-        from diagrams.aws.database import Dynamodb, RDS
-        from diagrams.aws.storage import S3
-        from diagrams.aws.network import APIGateway
-        from diagrams.aws.ml import Sagemaker
-        from diagrams.onprem.client import User
-        from diagrams.custom import Custom
+        import matplotlib
+        matplotlib.use("Agg")   # non-interactive backend, safe in server context
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
         desc_lower = description.lower()
 
-        output_dir  = str(Path(output_path).parent)
-        output_name = Path(output_path).stem
+        # Determine components to show
+        components = ["User"]
+        if "api" in desc_lower or "gateway" in desc_lower or "endpoint" in desc_lower:
+            components.append("API Layer")
+        components.append("Agent")
+        if "knowledge" in desc_lower or "rag" in desc_lower or "search" in desc_lower:
+            components.append("Knowledge Base")
+        if "database" in desc_lower or "dynamodb" in desc_lower or "storage" in desc_lower:
+            components.append("Storage")
+        if "human" in desc_lower or "escalat" in desc_lower:
+            components.append("Human Support")
 
-        with Diagram(
+        n = len(components)
+        fig, ax = plt.subplots(figsize=(max(8, n * 2.2), 5))
+        ax.set_xlim(0, n)
+        ax.set_ylim(0, 3)
+        ax.axis("off")
+        fig.patch.set_facecolor("#1a1a2e")
+        ax.set_facecolor("#1a1a2e")
+
+        box_colors = {
+            "User":          "#4ade80",
+            "API Layer":     "#60a5fa",
+            "Agent":         "#a78bfa",
+            "Knowledge Base":"#f59e0b",
+            "Storage":       "#f59e0b",
+            "Human Support": "#f87171",
+        }
+        default_color = "#94a3b8"
+
+        box_w, box_h = 1.4, 0.7
+        y_center = 1.5
+        positions = []
+
+        for i, comp in enumerate(components):
+            cx = i + 0.5
+            cy = y_center
+            positions.append((cx, cy))
+            color = box_colors.get(comp, default_color)
+            rect = FancyBboxPatch(
+                (cx - box_w / 2, cy - box_h / 2), box_w, box_h,
+                boxstyle="round,pad=0.06",
+                linewidth=1.5,
+                edgecolor=color,
+                facecolor=color + "22",   # transparent fill
+            )
+            ax.add_patch(rect)
+            ax.text(cx, cy, comp, ha="center", va="center",
+                    fontsize=9, color=color, fontweight="bold",
+                    wrap=True)
+
+        # Draw arrows between consecutive boxes
+        for i in range(len(positions) - 1):
+            x1, y1 = positions[i]
+            x2, y2 = positions[i + 1]
+            ax.annotate(
+                "",
+                xy=(x2 - box_w / 2 + 0.05, y2),
+                xytext=(x1 + box_w / 2 - 0.05, y1),
+                arrowprops=dict(
+                    arrowstyle="->",
+                    color="#94a3b8",
+                    lw=1.2,
+                    connectionstyle="arc3,rad=0.0",
+                ),
+            )
+
+        # Title
+        ax.set_title(
             "Agent Architecture",
-            filename=str(Path(output_dir) / output_name),
-            outformat="png",
-            show=False,
-        ):
-            user = User("User")
+            color="#e2e8f0", fontsize=11, fontweight="bold", pad=10,
+        )
 
-            with Cluster("Lyzr ADK Agents"):
-                orchestrator   = Lambda("OrchestratorAgent")
-                code_generator = Lambda("CodeGeneratorAgent")
+        # Description snippet at bottom
+        snippet = textwrap.fill(description[:180], width=90)
+        fig.text(0.5, 0.04, snippet, ha="center", va="bottom",
+                 fontsize=7, color="#64748b", style="italic")
 
-            nodes = [orchestrator, code_generator]
+        plt.tight_layout(rect=[0, 0.08, 1, 1])
+        plt.savefig(output_path, dpi=150, bbox_inches="tight",
+                    facecolor=fig.get_facecolor())
+        plt.close(fig)
 
-            if "dynamodb" in desc_lower or "database" in desc_lower:
-                db = Dynamodb("DynamoDB")
-                nodes.append(db)
-            if "s3" in desc_lower or "storage" in desc_lower:
-                store = S3("S3 Storage")
-                nodes.append(store)
-            if "api" in desc_lower or "gateway" in desc_lower:
-                api = APIGateway("API Gateway")
-                user >> api >> orchestrator
-            else:
-                user >> orchestrator
-
-            orchestrator >> code_generator
-
-        final_path = str(Path(output_dir) / f"{output_name}.png")
-        return final_path
+        if Path(output_path).exists():
+            return output_path
 
     except ImportError:
-        # diagrams library not installed
-        return _generate_diagram_stub(description, output_path)
+        pass
+    except Exception as e:
+        print(f"[diagram_tool] matplotlib error: {e}")
 
-
-def _generate_diagram_stub(description: str, output_path: str) -> str:
-    """
-    Last-resort stub: write a text description when no diagram library is available.
-    """
-    stub_path = output_path.replace(".png", ".txt")
-    Path(stub_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(stub_path, "w") as f:
-        f.write(f"Architecture Diagram (text stub)\n{'='*40}\n\n{description}\n")
-    return stub_path
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Public tool function — registered with agent.add_tool()
+# Text stub — always works
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _generate_text_stub(description: str, output_path: str) -> str:
+    stub_path = str(Path(output_path).with_suffix(".txt"))
+    Path(stub_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(stub_path, "w") as f:
+        f.write(f"Architecture Diagram\n{'=' * 40}\n\n{description}\n")
+    return f"[STUB] No diagram library available. Description saved to: {stub_path}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public tool — registered with agent.add_tool()
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_diagram(description: str, output_path: str = "./artifacts/diagram/architecture.png") -> str:
     """
-    Generate an architecture diagram from a system description.
+    Generate an architecture diagram PNG from a system description.
 
     Tries in order:
-    1. AWS Diagrams MCP server (uvx awslabs.aws-diagrams-mcp-server@latest)
-    2. Python diagrams library (local, no subprocess)
-    3. Text stub (always works)
+    1. AWS Diagrams MCP server — only when DIAGRAM_TOOL_MODE=mcp in .env
+    2. Python `diagrams` library — local, requires graphviz system package
+    3. matplotlib — pure-Python PNG, no system deps required
+    4. Text stub — always succeeds
 
     Args:
         description: Natural-language description of the agent architecture,
-                     including AWS services, components, and data flows.
-        output_path: File path where the diagram PNG should be saved.
+                     components, integrations, and data flows.
+        output_path: Where to save the PNG.  Parent dirs are created automatically.
 
     Returns:
-        Absolute path to the generated file, or an error description.
+        Absolute path to the generated file, or an error string.
     """
-    # Ensure output directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-    mode = os.getenv("DIAGRAM_TOOL_MODE", "mcp").lower()
+    mode = os.getenv("DIAGRAM_TOOL_MODE", "local").lower()
 
-    # ── MCP mode ──────────────────────────────────────────────────────────────
+    # ── MCP (explicit opt-in only) ────────────────────────────────────────────
     if mode == "mcp":
-        try:
-            result = asyncio.run(
-                _call_mcp_diagram_server(description, output_path)
-            )
-            if result:
-                return f"[MCP] Diagram saved to: {result}"
-            # MCP failed → fall through to local
-            print("[diagram_tool] MCP unavailable, falling back to local diagrams library")
-        except RuntimeError:
-            # asyncio.run() inside existing event loop (e.g. Jupyter / FastAPI)
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(
-                    asyncio.run,
-                    _call_mcp_diagram_server(description, output_path)
-                )
-                result = future.result(timeout=30)
-            if result:
-                return f"[MCP] Diagram saved to: {result}"
+        result = _try_mcp(description, output_path)
+        if result:
+            return f"[MCP] Diagram saved to: {result}"
+        print("[diagram_tool] MCP unavailable, falling back to local")
 
-    # ── Local mode ────────────────────────────────────────────────────────────
-    result = _generate_diagram_local(description, output_path)
-    if result.endswith(".txt"):
-        return f"[STUB] No diagram library available. Description saved to: {result}"
-    return f"[LOCAL] Diagram saved to: {result}"
+    # ── diagrams library ──────────────────────────────────────────────────────
+    result = _try_diagrams_library(description, output_path)
+    if result:
+        return f"[LOCAL] Diagram saved to: {result}"
+
+    # ── matplotlib fallback ───────────────────────────────────────────────────
+    result = _try_matplotlib(description, output_path)
+    if result:
+        return f"[MATPLOTLIB] Diagram saved to: {result}"
+
+    # ── text stub ─────────────────────────────────────────────────────────────
+    return _generate_text_stub(description, output_path)
