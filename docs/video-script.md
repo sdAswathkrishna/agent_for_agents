@@ -47,15 +47,20 @@ BuilderAI loads — sidebar on the left, clean dark chat panel, Builder panel on
 
 ## [0:35 – 1:20] — Build an Agent Through the UI
 
-**Show:** Click **New** in the sidebar. Type "Customer Support Agent". Press Enter.
+**Show:** Click **New** in the sidebar. Type "Weather Agent". Press Enter.
 
 **Say:**
 > "New project. I'll describe what I need."
 
 **Show:** Type in the chat:
-> "I want a customer support agent that searches a knowledge base, escalates unresolved issues to a human, and updates ticket status in Zendesk."
+> "I want an agent that looks up the current weather for any city and tells me whether I need an umbrella."
 
 **Show:** Agent responds with the first question. Continue answering naturally — 3 to 4 exchanges. The stage label at the top of the chat advances: Requirements → Tech Stack → Details → Architecture.
+
+Sample exchange to follow:
+- Agent asks about target users → answer: "Just me, personal use"
+- Agent asks about tech preferences → answer: "Python, no preference on LLM"
+- Agent asks about data sources → answer: "Use wttr.in — it's a free public API, no key needed"
 
 **Say:**
 > "The OrchestratorAgent walks through a six-stage requirements conversation.
@@ -79,11 +84,12 @@ BuilderAI loads — sidebar on the left, clean dark chat panel, Builder panel on
 
 ## [1:45 – 2:05] — Review Files, Download ZIP
 
-**Show:** Click through the file tree — `agent.py`, `tools/search_knowledge_base.py`, `agent.yaml`.
+**Show:** Click through the file tree — `agent.py`, `tools/get_weather.py`, `agent.yaml`.
 
 **Say:**
 > "Real code. Not scaffolding, not stubs.
-> The tools make actual API calls. The agent.py has a working chat loop.
+> The weather tool makes a real httpx call to wttr.in — no API key, no setup.
+> The agent.py has a working chat loop.
 > The GitAgent spec files are here too — agent.yaml, SOUL.md, RULES.md."
 
 **Show:** Click the **Download ZIP** button in the top-right topbar (it's now active). ZIP downloads.
@@ -92,12 +98,12 @@ BuilderAI loads — sidebar on the left, clean dark chat panel, Builder panel on
 
 ## [2:05 – 2:25] — Open in Cursor
 
-**Show:** Open Cursor. Drag the unzipped folder in. Navigate to `agent.py`, then `tools/escalate_to_human.py`.
+**Show:** Open Cursor. Drag the unzipped folder in. Navigate to `agent.py`, then `tools/get_weather.py`.
 
 **Say:**
 > "I can open this directly in Cursor and run it.
-> Real httpx calls, environment variable credentials, proper error handling.
-> This is production code, not a template."
+> Real httpx call to wttr.in, JSON parsing, proper error handling.
+> No mocks, no placeholders — this runs immediately."
 
 ---
 
@@ -116,14 +122,15 @@ gitagent validate
 
 **Show:** Run:
 ```bash
-source .env
-gitagent run -a lyzr -p "hi"
+pip install -r requirements.txt
+gitagent run -a lyzr -p "What's the weather in London?"
 ```
 
-**Show:** Agent responds.
+**Show:** Agent responds with current weather and umbrella recommendation.
 
 **Say:**
-> "And it runs. One command. From the generated spec, against the Lyzr adapter."
+> "And it runs. One command, no extra setup — the tool hits a live API and the agent answers.
+> From the generated spec, against the Lyzr adapter."
 
 ---
 
@@ -144,8 +151,10 @@ gitagent run -a lyzr -p "hi"
 - [ ] Font size 16+ in terminal for readability
 - [ ] Clear terminal between sections (`clear`)
 - [ ] `source .env` before any `gitagent run` command
-- [ ] Have the unzipped agent folder ready in Cursor before recording (run generation once beforehand)
+- [ ] Run `pip install -r requirements.txt` inside the generated folder before recording the run step
+- [ ] Have the unzipped agent folder ready in Cursor before recording (run generation once beforehand so the files are already there)
 - [ ] Have at least one existing project in the BuilderAI sidebar so the UI doesn't look empty at start
+- [ ] Confirm `wttr.in` is reachable (`curl wttr.in/London?format=j1`) before hitting record
 - [ ] Silence notifications (Do Not Disturb on)
 - [ ] Record at 1920×1080
 
