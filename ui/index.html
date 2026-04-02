@@ -3,19 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Agent Builder — agent-for-agents</title>
+<title>BuilderAI</title>
 
-<!-- React + Babel CDN (no build step) -->
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-<!-- highlight.js for syntax highlighting -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
 <style>
-  /* ── Reset & base ─────────────────────────────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg:          #1a1a1a;
@@ -42,381 +39,424 @@
 
   html, body, #root { height: 100%; width: 100%; overflow: hidden; }
   body {
-    background: var(--bg);
-    color: var(--text);
+    background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-    font-size: 14px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
+    font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased;
   }
 
-  /* ── Layout ──────────────────────────────────────────────────────────── */
+  /* ── Layout ── */
   .app { display: flex; flex-direction: column; height: 100vh; }
 
   .topbar {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 20px; height: 52px; min-height: 52px;
-    background: var(--surface); border-bottom: 1px solid var(--border-soft);
-    z-index: 10;
+    padding: 0 16px; height: 50px; min-height: 50px;
+    background: var(--surface); border-bottom: 1px solid var(--border-soft); z-index: 10;
   }
-  .topbar-left { display: flex; align-items: center; gap: 10px; }
-  .logo-icon {
-    width: 28px; height: 28px; border-radius: 7px;
-    background: linear-gradient(135deg, var(--purple), #a78bfa);
+  .topbar-left { display: flex; align-items: center; gap: 9px; }
+
+  /* ── Logo SVG mark ── */
+  .logo-mark {
+    width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--purple) 0%, #a78bfa 100%);
     display: flex; align-items: center; justify-content: center;
-    font-size: 14px; flex-shrink: 0;
   }
-  .logo-text { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
-  .logo-sub  { font-size: 12px; color: var(--text-muted); margin-left: 4px; }
+  .logo-text { font-size: 13.5px; font-weight: 650; letter-spacing: -0.02em; }
+  .logo-sub  { font-size: 11.5px; color: var(--text-muted); }
+
   .topbar-right { display: flex; align-items: center; gap: 8px; }
   .badge {
-    padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 500;
     border: 1px solid var(--border);
   }
   .badge-purple { color: #a78bfa; border-color: rgba(139,92,246,0.3); background: var(--purple-soft); }
-  .badge-green  { color: var(--green); border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.06); }
-  .badge-amber  { color: var(--amber); border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.06); }
-  .badge-red    { color: var(--red);   border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.06); }
 
-  .workspace {
-    flex: 1; display: flex; min-height: 0;
+  /* Download ZIP — topbar only */
+  .btn-dl {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 11px; border-radius: 6px; font-size: 11.5px; font-weight: 500;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); cursor: not-allowed; opacity: 0.38;
+    transition: all 0.15s; white-space: nowrap;
   }
+  .btn-dl.ready {
+    color: var(--green); border-color: rgba(52,211,153,0.35);
+    background: rgba(52,211,153,0.06); cursor: pointer; opacity: 1;
+  }
+  .btn-dl.ready:hover { background: rgba(52,211,153,0.12); }
 
-  /* ── Left panel — projects sidebar ──────────────────────────────────── */
+  .workspace { flex: 1; display: flex; min-height: 0; }
+
+  /* ── Sidebar ── */
   .sidebar {
-    width: 220px; min-width: 220px;
+    width: 214px; min-width: 214px;
     background: var(--surface); border-right: 1px solid var(--border-soft);
     display: flex; flex-direction: column; overflow: hidden;
+    transition: width 0.2s ease, min-width 0.2s ease;
+    flex-shrink: 0;
   }
+  .sidebar.collapsed { width: 40px; min-width: 40px; }
+
+  /* Expanded sidebar */
   .sidebar-header {
-    padding: 14px 16px 10px; display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px 9px; display: flex; align-items: center; justify-content: space-between;
     border-bottom: 1px solid var(--border-soft);
   }
-  .sidebar-title { font-size: 11px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.08em; color: var(--text-muted); }
+  .sidebar-title {
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.09em; color: var(--text-muted);
+  }
+  .sidebar-actions { display: flex; align-items: center; gap: 4px; }
+
   .btn-icon {
-    width: 26px; height: 26px; border-radius: var(--radius-sm);
+    width: 24px; height: 24px; border-radius: 5px;
     background: transparent; border: 1px solid var(--border);
     color: var(--text-muted); cursor: pointer; display: flex;
-    align-items: center; justify-content: center; font-size: 16px;
-    transition: all 0.15s;
+    align-items: center; justify-content: center; font-size: 13px;
+    transition: all 0.14s; flex-shrink: 0;
   }
   .btn-icon:hover { background: var(--surface-2); color: var(--text); border-color: var(--purple); }
 
-  .project-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .project-list { flex: 1; overflow-y: auto; padding: 6px; }
   .project-item {
-    padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer;
-    transition: background 0.12s; margin-bottom: 2px;
-    border: 1px solid transparent;
+    padding: 8px 9px; border-radius: var(--radius-sm); cursor: pointer;
+    transition: background 0.12s; margin-bottom: 2px; border: 1px solid transparent;
   }
-  .project-item:hover   { background: var(--surface-2); }
-  .project-item.active  { background: var(--purple-soft); border-color: rgba(139,92,246,0.25); }
-  .project-name { font-size: 13px; font-weight: 500; white-space: nowrap;
+  .project-item:hover  { background: var(--surface-2); }
+  .project-item.active { background: var(--purple-soft); border-color: rgba(139,92,246,0.22); }
+  .project-name { font-size: 12.5px; font-weight: 500; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
-  .project-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px;
-    display: flex; align-items: center; gap: 6px; }
-  .project-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .project-meta { font-size: 10.5px; color: var(--text-muted); margin-top: 2px;
+    display: flex; align-items: center; gap: 5px; }
+  .project-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 
-  /* ── Chat panel ──────────────────────────────────────────────────────── */
+  /* Collapsed icon rail */
+  .sidebar-rail {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px; padding: 8px 0; flex: 1;
+  }
+  .rail-dot {
+    width: 8px; height: 8px; border-radius: 50%; cursor: pointer;
+    transition: transform 0.12s; flex-shrink: 0;
+  }
+  .rail-dot:hover { transform: scale(1.3); }
+  .rail-dot.active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px currentColor; }
+
+  /* ── Draggable divider ── */
+  .divider {
+    width: 3px; min-width: 3px; flex-shrink: 0;
+    cursor: col-resize; background: var(--border-soft);
+    transition: background 0.15s; position: relative; z-index: 5;
+    user-select: none;
+  }
+  .divider:hover { background: var(--purple); }
+  .divider.dragging { background: var(--purple); }
+
+  /* ── Chat panel ── */
   .chat-panel {
     flex: 1; display: flex; flex-direction: column; min-width: 0;
-    background: var(--bg); border-right: 1px solid var(--border-soft);
+    background: var(--bg);
   }
   .chat-panel-header {
-    padding: 14px 20px; border-bottom: 1px solid var(--border-soft);
+    padding: 11px 18px; border-bottom: 1px solid var(--border-soft);
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--surface);
+    background: var(--surface); min-height: 50px;
   }
-  .chat-title { font-size: 13px; font-weight: 600; }
-  .chat-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .chat-title    { font-size: 12.5px; font-weight: 600; }
+  .chat-subtitle { font-size: 11px;   color: var(--text-muted); margin-top: 1px; }
 
-  .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .messages {
+    flex: 1; overflow-y: auto; padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
 
   .empty-state {
     flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 16px;
-    color: var(--text-muted); text-align: center; padding: 40px;
+    align-items: center; justify-content: center; gap: 14px;
+    color: var(--text-muted); text-align: center; padding: 36px;
   }
-  .empty-icon { font-size: 40px; opacity: 0.5; }
-  .empty-title { font-size: 18px; font-weight: 600; color: var(--text); }
-  .empty-desc  { font-size: 13px; max-width: 300px; line-height: 1.7; }
+  .empty-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .empty-desc  { font-size: 13px; max-width: 280px; line-height: 1.7; }
 
   /* Message bubbles */
-  .msg { display: flex; gap: 10px; animation: fadeUp 0.2s ease; }
+  .msg { display: flex; gap: 9px; animation: fadeUp 0.18s ease; }
   @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(6px); }
+    from { opacity: 0; transform: translateY(5px); }
     to   { opacity: 1; transform: translateY(0); }
   }
   .msg-user { flex-direction: row-reverse; }
 
   .msg-avatar {
-    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; font-size: 13px;
+    width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 12px;
   }
   .avatar-agent { background: linear-gradient(135deg, var(--purple), #a78bfa); }
   .avatar-user  { background: var(--surface-3); color: var(--text-muted); }
 
-  .msg-body { max-width: 75%; display: flex; flex-direction: column; gap: 4px; }
+  .msg-body { max-width: 78%; display: flex; flex-direction: column; gap: 3px; }
   .msg-user .msg-body { align-items: flex-end; }
 
   .msg-bubble {
-    padding: 10px 14px; border-radius: var(--radius);
-    line-height: 1.65; font-size: 13.5px;
+    padding: 9px 13px; border-radius: var(--radius); line-height: 1.65; font-size: 13px;
   }
   .bubble-agent {
     background: var(--surface); border: 1px solid var(--border-soft);
     border-bottom-left-radius: 3px; color: var(--text);
   }
-  .bubble-user {
-    background: var(--purple); border-bottom-right-radius: 3px; color: #fff;
-  }
+  .bubble-user { background: var(--purple); border-bottom-right-radius: 3px; color: #fff; }
   .msg-time { font-size: 10px; color: var(--text-dim); }
 
-  /* Typing indicator */
-  .typing { display: flex; gap: 4px; padding: 12px 14px; align-items: center; }
-  .dot-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted);
+  /* Typing */
+  .typing { display: flex; gap: 4px; padding: 11px 13px; align-items: center; }
+  .dot-pulse { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted);
     animation: pulse 1.2s infinite; }
   .dot-pulse:nth-child(2) { animation-delay: 0.2s; }
   .dot-pulse:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes pulse { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); }
-    40% { opacity: 1; transform: scale(1); } }
+  @keyframes pulse {
+    0%,80%,100% { opacity: 0.3; transform: scale(0.8); }
+    40%          { opacity: 1;   transform: scale(1);   }
+  }
 
-  /* Input area */
+  /* ── Generate CTA bubble ── */
+  .generate-cta-bubble {
+    margin-left: 37px; padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.06), rgba(167,139,250,0.04));
+    border: 1px solid rgba(139,92,246,0.28); border-radius: 12px;
+    display: flex; flex-direction: column; gap: 10px;
+    animation: fadeUp 0.2s ease;
+  }
+  .cta-title { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .cta-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .btn-generate {
+    align-self: flex-start; display: flex; align-items: center; gap: 6px;
+    padding: 7px 16px; border-radius: 7px; font-size: 12.5px; font-weight: 600;
+    border: none; background: var(--purple); color: #fff; cursor: pointer;
+    transition: all 0.14s;
+  }
+  .btn-generate:hover:not(:disabled) { background: var(--purple-dim); }
+  .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cta-done {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 12px; border-radius: 7px;
+    background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2);
+    font-size: 12.5px; color: var(--green); font-weight: 500;
+  }
+
+  /* ── Input area ── */
   .input-area {
-    padding: 14px 20px; background: var(--surface);
+    padding: 12px 18px; background: var(--surface);
     border-top: 1px solid var(--border-soft);
   }
   .input-row {
-    display: flex; gap: 10px; align-items: flex-end;
+    display: flex; gap: 9px; align-items: center;
     background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 10px 14px;
-    transition: border-color 0.15s;
+    border-radius: var(--radius); padding: 8px 12px;
+    transition: border-color 0.14s;
   }
-  .input-row:focus-within { border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-glow); }
+  .input-row:focus-within { border-color: var(--purple); box-shadow: 0 0 0 2px var(--purple-glow); }
 
+  /* Single-line textarea — expands only on newlines, max 10 lines */
   textarea {
     flex: 1; background: transparent; border: none; outline: none;
-    color: var(--text); font-size: 13.5px; resize: none; font-family: inherit;
-    max-height: 120px; line-height: 1.5;
+    color: var(--text); font-size: 13px; resize: none; font-family: inherit;
+    line-height: 1.5; height: 20px;           /* single line by default */
+    overflow-x: hidden; overflow-y: hidden;    /* no scrollbar shown */
+    scrollbar-width: none;                     /* Firefox */
   }
+  textarea::-webkit-scrollbar { display: none; } /* Chromium */
   textarea::placeholder { color: var(--text-dim); }
 
   .btn-send {
-    width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
+    width: 30px; height: 30px; border-radius: 6px; flex-shrink: 0;
     background: var(--purple); border: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s; color: #fff; font-size: 16px;
+    transition: all 0.14s; color: #fff; font-size: 14px;
   }
-  .btn-send:hover   { background: var(--purple-dim); }
-  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-send:hover    { background: var(--purple-dim); }
+  .btn-send:disabled { opacity: 0.38; cursor: not-allowed; }
 
-  .input-hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; text-align: center; }
+  .input-hint { font-size: 10.5px; color: var(--text-dim); margin-top: 5px; text-align: center; }
 
-  /* Action bar above input */
-  .action-bar {
-    display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;
+  /* Diagram in chat */
+  .diagram-container {
+    margin-top: 8px; background: var(--surface-2); border-radius: var(--radius);
+    border: 1px solid var(--border-soft); overflow: hidden;
   }
-  .btn-action {
-    padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
-    cursor: pointer; border: 1px solid var(--border); background: var(--surface-2);
-    color: var(--text-muted); transition: all 0.15s; display: flex; align-items: center; gap: 5px;
+  .diagram-label {
+    padding: 5px 11px; font-size: 10.5px; color: var(--text-muted);
+    border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; gap: 5px;
   }
-  .btn-action:hover { border-color: var(--purple); color: var(--text); background: var(--purple-soft); }
-  .btn-action.primary {
-    background: var(--purple); color: #fff; border-color: var(--purple);
-  }
-  .btn-action.primary:hover { background: var(--purple-dim); }
-  .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+  .diagram-container img { width: 100%; height: auto; display: block; }
 
-  /* ── Right panel — builder / files ───────────────────────────────────── */
+  /* ── Right panel ── */
   .right-panel {
-    width: 480px; min-width: 380px; max-width: 560px;
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: column; flex-shrink: 0;
     background: var(--surface); border-left: 1px solid var(--border-soft);
   }
   .right-panel-header {
-    padding: 14px 18px; border-bottom: 1px solid var(--border-soft);
+    padding: 12px 16px; border-bottom: 1px solid var(--border-soft);
     display: flex; align-items: center; justify-content: space-between;
+    min-height: 50px;
   }
   .right-tabs { display: flex; gap: 2px; }
   .tab {
-    padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
-    cursor: pointer; color: var(--text-muted); transition: all 0.12s; border: none;
-    background: transparent;
+    padding: 4px 11px; border-radius: var(--radius-sm); font-size: 11.5px; font-weight: 500;
+    cursor: pointer; color: var(--text-muted); transition: all 0.12s;
+    border: none; background: transparent;
   }
   .tab.active { background: var(--surface-3); color: var(--text); }
   .tab:hover:not(.active) { color: var(--text); }
 
   .right-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 
-  /* ── Builder animation panel ─────────────────────────────────────────── */
-  .builder-panel { flex: 1; overflow-y: auto; padding: 20px; }
+  /* Builder panel */
+  .builder-panel { flex: 1; overflow-y: auto; padding: 18px; }
 
   .build-idle {
     height: 100%; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 14px;
-    color: var(--text-muted); text-align: center; padding: 30px;
+    align-items: center; justify-content: center; gap: 12px;
+    color: var(--text-muted); text-align: center; padding: 28px;
   }
-  .build-idle-icon { font-size: 48px; opacity: 0.25; }
-  .build-idle-text { font-size: 13px; max-width: 240px; line-height: 1.7; }
+  .build-idle-text { font-size: 12.5px; max-width: 230px; line-height: 1.7; }
 
-  /* Progress steps */
   .build-steps { display: flex; flex-direction: column; gap: 0; }
-
   .build-step {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 12px 0; position: relative;
+    display: flex; align-items: flex-start; gap: 11px;
+    padding: 11px 0; position: relative;
   }
   .build-step:not(:last-child)::after {
-    content: ''; position: absolute; left: 15px; top: 36px;
-    width: 2px; height: calc(100% - 24px);
-    background: var(--border-soft);
+    content: ''; position: absolute; left: 14px; top: 34px;
+    width: 2px; height: calc(100% - 22px); background: var(--border-soft);
   }
-  .build-step.done::after   { background: rgba(52,211,153,0.3); }
+  .build-step.done::after  { background: rgba(52,211,153,0.28); }
   .build-step.active::after { background: linear-gradient(var(--purple), var(--border-soft)); }
 
   .step-icon {
-    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; position: relative; z-index: 1;
+    font-size: 12px; position: relative; z-index: 1;
   }
   .step-icon.pending { background: var(--surface-2); border: 2px solid var(--border); color: var(--text-dim); }
   .step-icon.active  { background: var(--purple-glow); border: 2px solid var(--purple);
     color: var(--purple); animation: stepPulse 1.5s infinite; }
-  .step-icon.done    { background: rgba(52,211,153,0.1); border: 2px solid rgba(52,211,153,0.4);
-    color: var(--green); }
-  .step-icon.error   { background: rgba(248,113,113,0.1); border: 2px solid rgba(248,113,113,0.4);
-    color: var(--red); }
+  .step-icon.done    { background: rgba(52,211,153,0.1);  border: 2px solid rgba(52,211,153,0.38); color: var(--green); }
+  .step-icon.error   { background: rgba(248,113,113,0.1); border: 2px solid rgba(248,113,113,0.38); color: var(--red); }
   @keyframes stepPulse {
     0%,100% { box-shadow: 0 0 0 0 var(--purple-glow); }
-    50%      { box-shadow: 0 0 0 6px transparent; }
+    50%      { box-shadow: 0 0 0 5px transparent; }
   }
 
-  .step-content { flex: 1; padding-top: 4px; }
-  .step-label { font-size: 13px; font-weight: 500; }
+  .step-content { flex: 1; padding-top: 3px; }
+  .step-label { font-size: 12.5px; font-weight: 500; }
   .step-label.active  { color: var(--text); }
   .step-label.pending { color: var(--text-muted); }
   .step-label.done    { color: var(--text); }
-  .step-desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+  .step-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-  /* Spinning loader inside icon */
-  .spin { animation: spin 1s linear infinite; }
+  .spin { animation: spin 1s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* File tree (post-generation) */
-  .file-tree { flex: 1; overflow-y: auto; }
+  /* File tree */
   .file-tree-header {
-    padding: 10px 18px; border-bottom: 1px solid var(--border-soft);
-    font-size: 11px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.08em; color: var(--text-muted);
+    padding: 9px 16px; border-bottom: 1px solid var(--border-soft);
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.09em; color: var(--text-muted);
     display: flex; align-items: center; justify-content: space-between;
   }
-  .file-group { padding: 6px 0; }
+  .file-group { padding: 5px 0; }
   .file-group-label {
-    padding: 4px 18px; font-size: 10px; font-weight: 600; text-transform: uppercase;
+    padding: 3px 16px; font-size: 9.5px; font-weight: 600; text-transform: uppercase;
     letter-spacing: 0.1em; color: var(--text-dim);
   }
   .file-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 18px; cursor: pointer; transition: background 0.1s;
-    font-size: 12.5px;
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 16px; cursor: pointer; transition: background 0.1s; font-size: 12px;
   }
   .file-item:hover  { background: var(--surface-2); }
   .file-item.active { background: var(--purple-soft); }
-  .file-icon { font-size: 13px; flex-shrink: 0; width: 16px; text-align: center; }
-  .file-name { flex: 1; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-icon { font-size: 12px; flex-shrink: 0; width: 15px; text-align: center; }
+  .file-name {
+    flex: 1; font-family: var(--font-mono); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px;
+  }
   .file-badge {
-    font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+    font-size: 8.5px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
   }
-  .fb-yaml   { background: rgba(96,165,250,0.15);  color: var(--blue); }
-  .fb-python { background: rgba(139,92,246,0.15);  color: #a78bfa; }
-  .fb-md     { background: rgba(251,191,36,0.15);  color: var(--amber); }
-  .fb-config { background: rgba(52,211,153,0.1);   color: var(--green); }
-  .fb-gitagent { background: rgba(139,92,246,0.25); color: #c4b5fd; }
+  .fb-yaml     { background: rgba(96,165,250,0.14);  color: var(--blue); }
+  .fb-python   { background: rgba(139,92,246,0.14);  color: #a78bfa; }
+  .fb-md       { background: rgba(251,191,36,0.14);  color: var(--amber); }
+  .fb-config   { background: rgba(52,211,153,0.09);  color: var(--green); }
+  .fb-gitagent { background: rgba(139,92,246,0.22);  color: #c4b5fd; }
 
-  /* Code viewer */
+  /* Code viewer — smaller font */
   .code-viewer { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
   .code-viewer-header {
-    padding: 8px 18px; border-top: 1px solid var(--border-soft);
+    padding: 7px 16px; border-top: 1px solid var(--border-soft);
     border-bottom: 1px solid var(--border-soft);
     display: flex; align-items: center; justify-content: space-between;
     background: var(--surface-2);
   }
-  .code-path { font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); }
+  .code-path { font-size: 11px; font-family: var(--font-mono); color: var(--text-muted); }
   .code-content { flex: 1; overflow-y: auto; }
   .code-content pre { margin: 0 !important; border-radius: 0 !important;
-    font-size: 12px !important; line-height: 1.6 !important; }
+    font-size: 10.5px !important; line-height: 1.6 !important; }
   .code-content code { font-family: var(--font-mono) !important; }
 
-  /* ── New project modal ───────────────────────────────────────────────── */
+  /* Modal */
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(4px);
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center; z-index: 100;
-    animation: fadeIn 0.15s ease;
+    animation: fadeIn 0.14s ease;
   }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .modal {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 28px; width: 420px; max-width: 90vw;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
-    animation: slideUp 0.2s ease;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 13px;
+    padding: 26px; width: 400px; max-width: 90vw;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55); animation: slideUp 0.18s ease;
   }
-  @keyframes slideUp { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform: translateY(0); } }
-  .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
-  .modal-desc  { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+  @keyframes slideUp { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform: none; } }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 5px; }
+  .modal-desc  { font-size: 12.5px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.6; }
   .modal-input {
     width: 100%; background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 10px 14px;
-    color: var(--text); font-size: 14px; outline: none; font-family: inherit;
-    transition: border-color 0.15s;
+    border-radius: var(--radius-sm); padding: 9px 13px;
+    color: var(--text); font-size: 13.5px; outline: none; font-family: inherit;
+    transition: border-color 0.14s;
   }
-  .modal-input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-glow); }
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .modal-input:focus { border-color: var(--purple); box-shadow: 0 0 0 2px var(--purple-glow); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
   .btn-ghost {
-    padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+    padding: 7px 15px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 500;
     cursor: pointer; border: 1px solid var(--border); background: transparent;
-    color: var(--text-muted); transition: all 0.15s;
+    color: var(--text-muted); transition: all 0.14s;
   }
   .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
   .btn-primary {
-    padding: 8px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
-    cursor: pointer; border: none; background: var(--purple); color: #fff; transition: all 0.15s;
+    padding: 7px 17px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600;
+    cursor: pointer; border: none; background: var(--purple); color: #fff; transition: all 0.14s;
   }
   .btn-primary:hover { background: var(--purple-dim); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* scrollbars */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--border); }
 
-  /* toast */
-  .toast-container { position: fixed; bottom: 20px; right: 20px; display: flex;
-    flex-direction: column; gap: 8px; z-index: 200; }
+  /* Toasts */
+  .toast-container { position: fixed; bottom: 18px; right: 18px; display: flex;
+    flex-direction: column; gap: 7px; z-index: 200; }
   .toast {
-    padding: 10px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+    padding: 9px 14px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 500;
     background: var(--surface-2); border: 1px solid var(--border);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4); animation: slideIn 0.2s ease;
-    display: flex; align-items: center; gap: 8px; max-width: 340px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); animation: slideIn 0.18s ease;
+    display: flex; align-items: center; gap: 7px; max-width: 320px;
   }
-  @keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
-  .toast-success { border-color: rgba(52,211,153,0.3); color: var(--green); }
-  .toast-error   { border-color: rgba(248,113,113,0.3); color: var(--red); }
-  .toast-info    { border-color: rgba(139,92,246,0.3);  color: #a78bfa; }
-
-  /* Diagram in chat */
-  .diagram-container {
-    margin-top: 10px; background: var(--surface-2); border-radius: var(--radius);
-    border: 1px solid var(--border-soft); overflow: hidden;
-  }
-  .diagram-label {
-    padding: 6px 12px; font-size: 11px; color: var(--text-muted);
-    border-bottom: 1px solid var(--border-soft);
-    display: flex; align-items: center; gap: 6px;
-  }
-  .diagram-container img { width: 100%; height: auto; display: block; }
+  @keyframes slideIn { from { opacity:0; transform: translateX(16px); } to { opacity:1; transform: none; } }
+  .toast-success { border-color: rgba(52,211,153,0.28);  color: var(--green); }
+  .toast-error   { border-color: rgba(248,113,113,0.28); color: var(--red); }
+  .toast-info    { border-color: rgba(139,92,246,0.28);  color: #a78bfa; }
 </style>
 </head>
 <body>
@@ -424,11 +464,10 @@
 
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
-
 const API = 'http://localhost:8000';
 
-// ── helpers ────────────────────────────────────────────────────────────────
-const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// ── helpers ──────────────────────────────────────────────────────────────────
+const now = () => new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function statusColor(s) {
@@ -436,157 +475,147 @@ function statusColor(s) {
            generating:'var(--amber)', generated:'var(--green)',
            approved:'var(--green)' }[s] || 'var(--text-dim)';
 }
-
 function fileIcon(path) {
-  if (path.endsWith('.py'))        return '🐍';
-  if (path.endsWith('.yaml') || path.endsWith('.yml')) return '📋';
-  if (path.endsWith('.md'))        return '📝';
-  if (path.endsWith('.txt'))       return '📄';
-  if (path.endsWith('.example') || path.endsWith('.env')) return '⚙️';
-  if (path === 'SOUL.md')          return '✨';
-  if (path === 'RULES.md')         return '🛡️';
-  return '📄';
+  if (path === 'SOUL.md')  return '✦';
+  if (path === 'RULES.md') return '⊘';
+  if (path.endsWith('.py'))                          return '𝜆';
+  if (path.endsWith('.yaml')||path.endsWith('.yml')) return '⋮';
+  if (path.endsWith('.md'))                          return '¶';
+  return '·';
 }
-
 function fileBadge(path) {
-  if (path === 'agent.yaml')                       return ['gitagent', 'GitAgent'];
-  if (path === 'SOUL.md' || path === 'RULES.md')   return ['gitagent', 'GitAgent'];
-  if (path.startsWith('skills/') && path.endsWith('SKILL.md')) return ['gitagent', 'GitAgent'];
-  if (path.startsWith('tools/') && path.endsWith('.yaml'))     return ['yaml', 'YAML'];
-  if (path.endsWith('.py'))                        return ['python', 'Python'];
-  if (path.endsWith('.md'))                        return ['md', 'Markdown'];
-  return ['config', 'Config'];
+  if (path === 'agent.yaml' || path === 'SOUL.md' || path === 'RULES.md') return ['gitagent','GA'];
+  if (path.startsWith('skills/') && path.endsWith('SKILL.md'))           return ['gitagent','GA'];
+  if (path.startsWith('tools/') && path.endsWith('.yaml'))               return ['yaml','YML'];
+  if (path.endsWith('.py'))                                               return ['python','PY'];
+  if (path.endsWith('.md'))                                               return ['md','MD'];
+  return ['config','CFG'];
 }
-
 function groupFiles(files) {
-  const groups = { 'GitAgent Spec': [], 'Lyzr ADK Code': [], 'Config & Docs': [] };
+  const g = { 'GitAgent Spec':[], 'Lyzr ADK Code':[], 'Config & Docs':[] };
   for (const f of files) {
     const p = f.path;
     if (p === 'agent.yaml' || p === 'SOUL.md' || p === 'RULES.md' ||
-        p.startsWith('skills/') || (p.startsWith('tools/') && p.endsWith('.yaml'))) {
-      groups['GitAgent Spec'].push(f);
-    } else if (p.endsWith('.py')) {
-      groups['Lyzr ADK Code'].push(f);
-    } else {
-      groups['Config & Docs'].push(f);
-    }
+        p.startsWith('skills/') || (p.startsWith('tools/') && p.endsWith('.yaml')))
+      g['GitAgent Spec'].push(f);
+    else if (p.endsWith('.py'))
+      g['Lyzr ADK Code'].push(f);
+    else
+      g['Config & Docs'].push(f);
   }
-  return groups;
+  return g;
 }
 
-// ── Build steps definition ────────────────────────────────────────────────
-const GENERATION_STEPS = [
-  { id: 'start',    label: 'Starting generation',         desc: 'Initialising CodeGeneratorAgent'         },
-  { id: 'lyzr',     label: 'Writing Lyzr ADK code',      desc: 'agent.py + tools + requirements.txt'     },
-  { id: 'gitagent', label: 'Writing GitAgent spec',       desc: 'agent.yaml + SOUL.md + RULES.md'         },
-  { id: 'skills',   label: 'Writing skills & tools',      desc: 'skills/*/SKILL.md + tools/*.yaml'        },
-  { id: 'validate', label: 'Packaging artifacts',         desc: 'Saving files + building ZIP'             },
-  { id: 'done',     label: 'Generation complete',         desc: 'Ready to download'                       },
+// ── SVG logo mark ─────────────────────────────────────────────────────────────
+function LogoMark() {
+  return (
+    <div className="logo-mark">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Three-node connected graph — represents agent network */}
+        <circle cx="7.5" cy="3"   r="2"   fill="white"/>
+        <circle cx="2.5" cy="12"  r="2"   fill="rgba(255,255,255,0.75)"/>
+        <circle cx="12.5" cy="12" r="2"   fill="rgba(255,255,255,0.75)"/>
+        <line x1="7.5" y1="5"   x2="3.3"  y2="10.4" stroke="rgba(255,255,255,0.55)" strokeWidth="1.25" strokeLinecap="round"/>
+        <line x1="7.5" y1="5"   x2="11.7" y2="10.4" stroke="rgba(255,255,255,0.55)" strokeWidth="1.25" strokeLinecap="round"/>
+        <line x1="4.4" y1="12"  x2="10.6" y2="12"   stroke="rgba(255,255,255,0.55)" strokeWidth="1.25" strokeLinecap="round"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── Build steps ───────────────────────────────────────────────────────────────
+const STEPS = [
+  { id:'start',    label:'Starting generation',   desc:'Initialising CodeGeneratorAgent'     },
+  { id:'lyzr',     label:'Writing Lyzr ADK code', desc:'agent.py · tools · requirements.txt' },
+  { id:'gitagent', label:'Writing GitAgent spec',  desc:'agent.yaml · SOUL.md · RULES.md'     },
+  { id:'skills',   label:'Writing skills & tools', desc:'skills/*/SKILL.md · tools/*.yaml'    },
+  { id:'validate', label:'Packaging artifacts',    desc:'Saving files · building ZIP'         },
+  { id:'done',     label:'Generation complete',    desc:'Ready to download'                   },
 ];
 
-// ── Toast component ────────────────────────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────────────────────
 function Toasts({ toasts }) {
   return (
     <div className="toast-container">
       {toasts.map(t => (
         <div key={t.id} className={`toast toast-${t.kind}`}>
-          {t.kind === 'success' ? '✓' : t.kind === 'error' ? '✗' : 'ℹ'} {t.msg}
+          {t.kind==='success'?'✓':t.kind==='error'?'✗':'i'} {t.msg}
         </div>
       ))}
     </div>
   );
 }
 
-// ── New project modal ──────────────────────────────────────────────────────
+// ── New project modal ─────────────────────────────────────────────────────────
 function NewProjectModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
   const ref = useRef();
   useEffect(() => ref.current?.focus(), []);
-
   const submit = () => { if (name.trim()) onCreate(name.trim()); };
-  const onKey = e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); };
-
+  const onKey = e => { if (e.key==='Enter') submit(); if (e.key==='Escape') onClose(); };
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay" onClick={e => e.target===e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-title">New Agent Project</div>
-        <div className="modal-desc">
-          Give your agent a name — the AI will ask what it should do next.
-        </div>
-        <input
-          ref={ref}
-          className="modal-input"
+        <div className="modal-desc">Name your agent — the AI will guide you through requirements next.</div>
+        <input ref={ref} className="modal-input"
           placeholder="e.g. Invoice Processing Agent"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={onKey}
-        />
+          value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} />
         <div className="modal-actions">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={submit} disabled={!name.trim()}>
-            Create Project
-          </button>
+          <button className="btn-primary" onClick={submit} disabled={!name.trim()}>Create</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Builder animation panel ────────────────────────────────────────────────
-function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) {
-  const [stepIdx, setStepIdx]   = useState(-1);
-  const [stepState, setStepState] = useState({});   // id → 'pending'|'active'|'done'|'error'
-  const [files, setFiles]       = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [activeTab, setActiveTab] = useState('builder'); // 'builder'|'files'
+// ── Builder / files right panel ───────────────────────────────────────────────
+function BuilderPanel({ status, genJob, projectId, panelWidth }) {
+  const [stepState, setStepState] = useState({});
+  const [files,     setFiles]     = useState([]);
+  const [selFile,   setSelFile]   = useState(null);
+  const [activeTab, setActiveTab] = useState('builder');
   const isGenerating = status === 'generating';
   const isDone       = status === 'generated' || status === 'approved';
 
-  // Animate steps while generating
+  // Animate steps during generation
   useEffect(() => {
     if (!isGenerating) return;
     setStepState({});
-    setStepIdx(0);
-
-    const delays = [0, 1200, 3000, 5500, 8500, null]; // null = wait for completion
+    const delays = [0, 1300, 3200, 5800, 8800, null];
     const timers = [];
-
-    GENERATION_STEPS.forEach((step, i) => {
-      if (delays[i] === null) return; // driven by polling
+    STEPS.forEach((step, i) => {
+      if (delays[i] === null) return;
       const t = setTimeout(() => {
         setStepState(prev => {
-          const next = { ...prev };
-          if (i > 0) next[GENERATION_STEPS[i-1].id] = 'done';
+          const next = {...prev};
+          if (i > 0) next[STEPS[i-1].id] = 'done';
           next[step.id] = 'active';
           return next;
         });
-        setStepIdx(i);
       }, delays[i]);
       timers.push(t);
     });
-
     return () => timers.forEach(clearTimeout);
   }, [isGenerating]);
 
-  // Mark all done when generation completes
   useEffect(() => {
     if (genJob?.status === 'completed') {
-      setStepState(() => Object.fromEntries(GENERATION_STEPS.map(s => [s.id, 'done'])));
-      setStepIdx(GENERATION_STEPS.length);
+      setStepState(Object.fromEntries(STEPS.map(s => [s.id, 'done'])));
       setActiveTab('files');
       loadFiles();
     }
     if (genJob?.status === 'failed') {
       setStepState(prev => {
-        const next = { ...prev };
-        const active = GENERATION_STEPS.find(s => next[s.id] === 'active');
-        if (active) next[active.id] = 'error';
+        const next = {...prev};
+        const a = STEPS.find(s => next[s.id] === 'active');
+        if (a) next[a.id] = 'error';
         return next;
       });
     }
   }, [genJob?.status]);
 
-  // Load files when switching to files tab and done
   useEffect(() => {
     if (activeTab === 'files' && isDone && files.length === 0) loadFiles();
   }, [activeTab, isDone]);
@@ -597,80 +626,63 @@ function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) 
       const r = await fetch(`${API}/projects/${projectId}/files`);
       const data = await r.json();
       setFiles(data);
-      if (data.length > 0) setSelectedFile(data[0]);
-      if (onFilesLoaded) onFilesLoaded(data);
+      if (data.length > 0) setSelFile(data[0]);
     } catch {}
   }
 
-  function stateOf(step) { return stepState[step.id] || 'pending'; }
+  useEffect(() => {
+    if (selFile) setTimeout(() => hljs.highlightAll(), 50);
+  }, [selFile]);
 
-  const stepIcon = (s) => {
-    if (s === 'active')  return <span className="spin">⟳</span>;
-    if (s === 'done')    return '✓';
-    if (s === 'error')   return '✗';
+  const stOf = step => stepState[step.id] || 'pending';
+  const stepIcon = s => {
+    if (s==='active') return <span className="spin">⟳</span>;
+    if (s==='done')   return '✓';
+    if (s==='error')  return '✗';
     return '○';
   };
 
   const fileGroups = groupFiles(files);
-  const [badge, badgeLabel] = selectedFile ? fileBadge(selectedFile.path) : ['',''];
-
-  // Highlight code on file select
-  useEffect(() => {
-    if (selectedFile) setTimeout(() => hljs.highlightAll(), 50);
-  }, [selectedFile]);
-
-  const downloadZip = async () => {
-    const r = await fetch(`${API}/projects/${projectId}/download`);
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = 'agent-gitagent-package.zip'; a.click();
-    URL.revokeObjectURL(url);
-  };
 
   return (
-    <div className="right-panel">
+    <div className="right-panel" style={{ width: panelWidth, minWidth: 340, maxWidth: 740 }}>
       <div className="right-panel-header">
         <div className="right-tabs">
           <button className={`tab ${activeTab==='builder'?'active':''}`} onClick={() => setActiveTab('builder')}>
-            ⚡ Builder
+            Builder
           </button>
           <button className={`tab ${activeTab==='files'?'active':''}`} onClick={() => setActiveTab('files')}>
-            📁 Files {files.length > 0 && `(${files.length})`}
+            Files {files.length > 0 && <span style={{color:'var(--text-dim)',marginLeft:3}}>({files.length})</span>}
           </button>
-        </div>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          {isDone && (
-            <button className="btn-action primary" onClick={downloadZip} style={{fontSize:11,padding:'4px 10px'}}>
-              ⬇ Download ZIP
-            </button>
-          )}
         </div>
       </div>
 
       <div className="right-body">
+        {/* ── Builder tab ── */}
         {activeTab === 'builder' && (
           <div className="builder-panel">
             {!isGenerating && !isDone && (
               <div className="build-idle">
-                <div className="build-idle-icon">🏗</div>
-                <div style={{fontWeight:600,fontSize:14,color:'var(--text)'}}>
-                  Waiting for requirements
-                </div>
+                <svg width="38" height="38" viewBox="0 0 38 38" fill="none" style={{opacity:0.2}}>
+                  <circle cx="19" cy="8"  r="5" fill="var(--purple)"/>
+                  <circle cx="7"  cy="30" r="5" fill="var(--purple)"/>
+                  <circle cx="31" cy="30" r="5" fill="var(--purple)"/>
+                  <line x1="19" y1="13" x2="8.5"  y2="25.5" stroke="var(--purple)" strokeWidth="2.5" strokeLinecap="round"/>
+                  <line x1="19" y1="13" x2="29.5" y2="25.5" stroke="var(--purple)" strokeWidth="2.5" strokeLinecap="round"/>
+                  <line x1="12"  y1="30" x2="26"  y2="30"   stroke="var(--purple)" strokeWidth="2.5" strokeLinecap="round"/>
+                </svg>
+                <div style={{fontWeight:600,fontSize:13.5,color:'var(--text)'}}>Waiting for requirements</div>
                 <div className="build-idle-text">
-                  Complete the conversation with the agent, then hit{' '}
-                  <strong style={{color:'var(--purple)'}}>Generate Agent</strong>{' '}
-                  to produce a full GitAgent-compliant package.
+                  Complete the conversation — the agent will prompt you to generate when ready.
                 </div>
-                <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:8,width:'100%',maxWidth:280}}>
-                  {GENERATION_STEPS.map(s => (
+                <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:6,width:'100%',maxWidth:260}}>
+                  {STEPS.map(s => (
                     <div key={s.id} style={{
-                      display:'flex',alignItems:'center',gap:8,
-                      padding:'7px 12px',borderRadius:8,
-                      background:'var(--surface-2)',
-                      border:'1px solid var(--border-soft)',
+                      display:'flex',alignItems:'center',gap:7,
+                      padding:'6px 11px',borderRadius:7,
+                      background:'var(--surface-2)',border:'1px solid var(--border-soft)',
                     }}>
-                      <span style={{color:'var(--text-dim)',fontSize:12}}>{s.label}</span>
+                      <span style={{color:'var(--text-dim)',fontSize:11.5}}>{s.label}</span>
                     </div>
                   ))}
                 </div>
@@ -679,23 +691,24 @@ function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) 
 
             {(isGenerating || isDone) && (
               <div className="build-steps">
-                {GENERATION_STEPS.map((step) => {
-                  const s = stateOf(step);
+                {STEPS.map(step => {
+                  const s = stOf(step);
                   return (
                     <div key={step.id} className={`build-step ${s}`}>
                       <div className={`step-icon ${s}`}>{stepIcon(s)}</div>
                       <div className="step-content">
                         <div className={`step-label ${s}`}>{step.label}</div>
                         <div className="step-desc">{step.desc}</div>
-                        {s === 'done' && step.id === 'done' && genJob?.files && (
-                          <div style={{marginTop:6,display:'flex',flexWrap:'wrap',gap:4}}>
+                        {s==='done' && step.id==='done' && genJob?.files && (
+                          <div style={{marginTop:5,display:'flex',flexWrap:'wrap',gap:4}}>
                             {genJob.files.slice(0,6).map(f => (
-                              <span key={f} className="badge badge-green" style={{fontSize:10}}>
+                              <span key={f} className="badge" style={{fontSize:9.5,color:'var(--green)',
+                                borderColor:'rgba(52,211,153,0.25)',background:'rgba(52,211,153,0.07)'}}>
                                 {f.split('/').pop()}
                               </span>
                             ))}
                             {genJob.files.length > 6 && (
-                              <span className="badge" style={{fontSize:10}}>+{genJob.files.length-6} more</span>
+                              <span className="badge" style={{fontSize:9.5}}>+{genJob.files.length-6} more</span>
                             )}
                           </div>
                         )}
@@ -705,40 +718,33 @@ function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) 
                 })}
 
                 {isDone && genJob?.message && (
-                  <div style={{
-                    marginTop:16,padding:'12px 14px',
-                    background:'rgba(52,211,153,0.06)',
-                    border:'1px solid rgba(52,211,153,0.2)',
-                    borderRadius:8,fontSize:12.5,color:'var(--text)',lineHeight:1.6,
-                  }}>
-                    <div style={{color:'var(--green)',fontWeight:600,marginBottom:4}}>✓ Generation complete</div>
+                  <div style={{marginTop:14,padding:'11px 13px',
+                    background:'rgba(52,211,153,0.05)',border:'1px solid rgba(52,211,153,0.18)',
+                    borderRadius:8,fontSize:12,color:'var(--text)',lineHeight:1.6}}>
+                    <div style={{color:'var(--green)',fontWeight:600,marginBottom:3,fontSize:11.5}}>✓ Complete</div>
                     {genJob.message}
                   </div>
                 )}
 
                 {isDone && genJob?.next_steps?.length > 0 && (
-                  <div style={{marginTop:12,padding:'12px 14px',
+                  <div style={{marginTop:10,padding:'11px 13px',
                     background:'var(--surface-2)',border:'1px solid var(--border-soft)',borderRadius:8}}>
-                    <div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',
-                      letterSpacing:'0.08em',color:'var(--text-muted)',marginBottom:8}}>
-                      Next steps
-                    </div>
+                    <div style={{fontSize:10,fontWeight:600,textTransform:'uppercase',
+                      letterSpacing:'0.09em',color:'var(--text-muted)',marginBottom:7}}>Next steps</div>
                     {genJob.next_steps.map((s,i) => (
-                      <div key={i} style={{display:'flex',gap:8,alignItems:'flex-start',
-                        marginBottom:4,fontSize:12}}>
-                        <span style={{color:'var(--purple)',fontWeight:600}}>{i+1}.</span>
-                        <span style={{fontFamily:'var(--font-mono)',fontSize:11.5,color:'var(--text)'}}>{s}</span>
+                      <div key={i} style={{display:'flex',gap:7,alignItems:'flex-start',marginBottom:4,fontSize:11.5}}>
+                        <span style={{color:'var(--purple)',fontWeight:700,flexShrink:0}}>{i+1}.</span>
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text)'}}>{s}</span>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {genJob?.status === 'failed' && (
-                  <div style={{marginTop:16,padding:'12px 14px',
-                    background:'rgba(248,113,113,0.06)',
-                    border:'1px solid rgba(248,113,113,0.2)',
-                    borderRadius:8,fontSize:12.5,color:'var(--red)'}}>
-                    ✗ Generation failed — {genJob.message}
+                  <div style={{marginTop:14,padding:'11px 13px',
+                    background:'rgba(248,113,113,0.05)',border:'1px solid rgba(248,113,113,0.18)',
+                    borderRadius:8,fontSize:12,color:'var(--red)'}}>
+                    ✗ {genJob.message}
                   </div>
                 )}
               </div>
@@ -746,39 +752,39 @@ function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) 
           </div>
         )}
 
+        {/* ── Files tab ── */}
         {activeTab === 'files' && (
           <div style={{display:'flex',flex:1,overflow:'hidden',flexDirection:'column'}}>
             {files.length === 0 ? (
               <div className="build-idle">
-                <div className="build-idle-icon">📭</div>
+                <div style={{fontSize:32,opacity:0.2}}>◫</div>
                 <div className="build-idle-text">No files yet — generate the agent first.</div>
               </div>
             ) : (
               <>
                 <div className="file-tree-header">
                   <span>Generated Files</span>
-                  <span style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>
+                  <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'var(--text-dim)'}}>
                     {files.length} files
                   </span>
                 </div>
                 <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-                  {/* File tree */}
-                  <div style={{width:200,minWidth:180,borderRight:'1px solid var(--border-soft)',
-                    overflow:'hidden auto',flexShrink:0}}>
+                  {/* Tree */}
+                  <div style={{width:188,minWidth:160,borderRight:'1px solid var(--border-soft)',
+                    overflowY:'auto',flexShrink:0}}>
                     {Object.entries(fileGroups).map(([group, gfiles]) => (
                       gfiles.length > 0 && (
                         <div key={group} className="file-group">
                           <div className="file-group-label">{group}</div>
                           {gfiles.map(f => {
-                            const [badge] = fileBadge(f.path);
+                            const [badge, label] = fileBadge(f.path);
                             return (
                               <div key={f.path}
-                                className={`file-item ${selectedFile?.path===f.path?'active':''}`}
-                                onClick={() => setSelectedFile(f)}
-                              >
+                                className={`file-item ${selFile?.path===f.path?'active':''}`}
+                                onClick={() => setSelFile(f)}>
                                 <span className="file-icon">{fileIcon(f.path)}</span>
                                 <span className="file-name">{f.path.split('/').pop()}</span>
-                                <span className={`file-badge fb-${badge}`}>{badge==='gitagent'?'GA':badge==='python'?'PY':badge==='yaml'?'YML':badge==='md'?'MD':'CFG'}</span>
+                                <span className={`file-badge fb-${badge}`}>{label}</span>
                               </div>
                             );
                           })}
@@ -788,25 +794,23 @@ function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) 
                   </div>
 
                   {/* Code viewer */}
-                  {selectedFile && (
+                  {selFile && (
                     <div className="code-viewer">
                       <div className="code-viewer-header">
-                        <span className="code-path">{selectedFile.path}</span>
-                        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                          <span className={`file-badge fb-${fileBadge(selectedFile.path)[0]}`}>
-                            {fileBadge(selectedFile.path)[1]}
-                          </span>
-                          <span style={{fontSize:11,color:'var(--text-dim)'}}>
-                            {selectedFile.content?.length || 0} chars
-                          </span>
+                        <span className="code-path">{selFile.path}</span>
+                        <div style={{display:'flex',gap:7,alignItems:'center'}}>
+                          {(() => { const [b,l] = fileBadge(selFile.path); return (
+                            <span className={`file-badge fb-${b}`}>{l}</span>
+                          ); })()}
+                          <span style={{fontSize:10,color:'var(--text-dim)'}}>{selFile.content?.length||0} ch</span>
                         </div>
                       </div>
-                      <div className="code-content" key={selectedFile.path}>
+                      <div className="code-content" key={selFile.path}>
                         <pre><code className={
-                          selectedFile.path.endsWith('.py') ? 'language-python' :
-                          selectedFile.path.endsWith('.yaml') || selectedFile.path.endsWith('.yml') ? 'language-yaml' :
-                          selectedFile.path.endsWith('.md') ? 'language-markdown' : 'language-plaintext'
-                        }>{selectedFile.content}</code></pre>
+                          selFile.path.endsWith('.py')  ? 'language-python'  :
+                          selFile.path.endsWith('.yaml')||selFile.path.endsWith('.yml') ? 'language-yaml' :
+                          selFile.path.endsWith('.md')  ? 'language-markdown': 'language-plaintext'
+                        }>{selFile.content}</code></pre>
                       </div>
                     </div>
                   )}
@@ -820,36 +824,60 @@ function BuilderPanel({ status, genJob, onGenerate, projectId, onFilesLoaded }) 
   );
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────
+// ── Main App ──────────────────────────────────────────────────────────────────
 function App() {
-  const [projects,       setProjects]      = useState([]);
-  const [activeProject,  setActiveProject] = useState(null);
-  const [messages,       setMessages]      = useState([]);
-  const [input,          setInput]         = useState('');
-  const [sending,        setSending]       = useState(false);
-  const [showNewModal,   setShowNewModal]  = useState(false);
-  const [genJob,         setGenJob]        = useState(null);
-  const [toasts,         setToasts]        = useState([]);
-  const [polling,        setPolling]       = useState(false);
+  const [projects,      setProjects]     = useState([]);
+  const [activeProject, setActiveProject] = useState(null);
+  const [messages,      setMessages]     = useState([]);
+  const [input,         setInput]        = useState('');
+  const [sending,       setSending]      = useState(false);
+  const [showNewModal,  setShowNewModal] = useState(false);
+  const [genJob,        setGenJob]       = useState(null);
+  const [toasts,        setToasts]       = useState([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rightWidth,    setRightWidth]   = useState(480);
+  const [isDragging,    setIsDragging]   = useState(false);
+
   const messagesEndRef = useRef(null);
   const textareaRef    = useRef(null);
+  const dragRef        = useRef(null);
 
-  // Derived
-  const status = activeProject?.status || 'gathering';
-  const canGenerate = ['designing','gathering'].includes(status) &&
-    activeProject?.conversation_state === 'architecture' ||
-    activeProject?.conversation_state === 'complete';
+  const status      = activeProject?.status || 'gathering';
   const isGenerating = status === 'generating';
+  const isDone      = status === 'generated' || status === 'approved';
+
+  const stateLabel = {
+    intro:'Intro', requirements:'Requirements', tech:'Tech Stack',
+    details:'Details', review:'Review', architecture:'Architecture', complete:'Complete',
+  }[activeProject?.conversation_state] || '—';
 
   useEffect(() => { loadProjects(); }, []);
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
 
-  // Poll generation status while generating
+  // Draggable divider
+  function startDrag(e) {
+    e.preventDefault();
+    setIsDragging(true);
+    dragRef.current = { startX: e.clientX, startW: rightWidth };
+
+    function onMove(me) {
+      const delta = dragRef.current.startX - me.clientX;
+      setRightWidth(Math.max(340, Math.min(720, dragRef.current.startW + delta)));
+    }
+    function onUp() {
+      setIsDragging(false);
+      dragRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // Generation polling
   useEffect(() => {
     if (!isGenerating || !activeProject) return;
-    setPolling(true);
     let cancelled = false;
-
     async function poll() {
       while (!cancelled) {
         await sleep(1800);
@@ -859,51 +887,48 @@ function App() {
           const job = await r.json();
           setGenJob(job);
           if (job.status === 'completed' || job.status === 'failed') {
-            // Refresh project
             const pr = await fetch(`${API}/projects/${activeProject.project_id}`);
-            const p = await pr.json();
+            const p  = await pr.json();
             setActiveProject(p);
-            setProjects(prev => prev.map(x => x.project_id === p.project_id ? p : x));
-            if (job.status === 'completed') {
-              toast('Agent generated — GitAgent + Lyzr ADK files ready!', 'success');
-            } else {
-              toast(job.message || 'Generation failed', 'error');
-            }
+            setProjects(prev => prev.map(x => x.project_id===p.project_id ? p : x));
+            toast(job.status==='completed'
+              ? 'Agent built — GitAgent + Lyzr ADK files ready!'
+              : job.message || 'Generation failed', job.status==='completed'?'success':'error');
             break;
           }
         } catch {}
       }
-      setPolling(false);
     }
     poll();
     return () => { cancelled = true; };
   }, [isGenerating, activeProject?.project_id]);
 
-  function toast(msg, kind = 'info') {
+  function toast(msg, kind='info') {
     const id = Date.now();
     setToasts(t => [...t, { id, msg, kind }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
+    setTimeout(() => setToasts(t => t.filter(x => x.id!==id)), 4000);
   }
 
   async function loadProjects() {
     try {
       const r = await fetch(`${API}/projects`);
-      const data = await r.json();
-      setProjects(data);
-    } catch { toast('Could not reach API — is uvicorn running on :8000?', 'error'); }
+      setProjects(await r.json());
+    } catch { toast('Cannot reach API — is uvicorn running on :8000?', 'error'); }
   }
 
   async function selectProject(p) {
     setActiveProject(p);
-    setMessages([]);
     setGenJob(null);
-    // Seed with a system greeting
-    setMessages([{
-      id: 0, role: 'agent',
-      text: `Continuing project "${p.name}". Current status: **${p.status}** — ${p.conversation_state} state.\n\nType a message to continue the conversation.`,
-      time: now(),
-    }]);
-    // Re-hydrate genJob if already done
+    const seed = [{
+      id: 0, role: 'agent', time: now(),
+      text: `Resuming "${p.name}". Status: ${p.status} · ${p.conversation_state}.\nType to continue the conversation.`,
+    }];
+    // Show generate CTA if already at architecture and not yet generated
+    if (['architecture','complete'].includes(p.conversation_state) &&
+        !['generating','generated','approved'].includes(p.status)) {
+      seed.push({ id: 1, role: 'agent', type: 'generate_cta', time: now() });
+    }
+    setMessages(seed);
     try {
       const r = await fetch(`${API}/projects/${p.project_id}/generate/status`);
       const job = await r.json();
@@ -915,162 +940,224 @@ function App() {
     setShowNewModal(false);
     try {
       const r = await fetch(`${API}/projects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ name }),
       });
       const p = await r.json();
       setProjects(prev => [p, ...prev]);
       setActiveProject(p);
       setGenJob(null);
-      setMessages([{
-        id: 0, role: 'agent',
-        text: `👋 Hi! I'm the Agent Builder. Tell me about the agent you want to build — what problem should it solve, and who will use it?`,
-        time: now(),
-      }]);
-      toast(`Project "${name}" created`, 'success');
+      setMessages([{ id: 0, role: 'agent', time: now(),
+        text: `👋 Hi! I'm BuilderAI. Tell me about the agent you want to build — what problem should it solve, and who will use it?` }]);
+      toast(`"${name}" created`, 'success');
     } catch { toast('Failed to create project', 'error'); }
+  }
+
+  async function triggerGenerate() {
+    if (!activeProject) return;
+    setGenJob({ status: 'running', message: 'Starting…' });
+    try {
+      await fetch(`${API}/projects/${activeProject.project_id}/generate`, { method: 'POST' });
+      setActiveProject(p => ({ ...p, status: 'generating' }));
+      setProjects(prev => prev.map(x =>
+        x.project_id === activeProject.project_id ? { ...x, status: 'generating' } : x));
+      toast('Generating — GitAgent + Lyzr ADK files incoming…', 'info');
+    } catch { toast('Failed to start generation', 'error'); }
+  }
+
+  async function downloadZip() {
+    if (!activeProject || !isDone) return;
+    const r = await fetch(`${API}/projects/${activeProject.project_id}/download`);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${activeProject.name}-gitagent.zip`; a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function sendMessage() {
     const text = input.trim();
     if (!text || !activeProject || sending) return;
     setInput('');
+    // Reset textarea to single-line height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '20px';
+      textareaRef.current.setAttribute('wrap', 'off');
+      textareaRef.current.style.overflowX = 'hidden';
+      textareaRef.current.style.overflowY = 'hidden';
+    }
     setSending(true);
 
-    const userMsg = { id: Date.now(), role: 'user', text, time: now() };
-    setMessages(m => [...m, userMsg]);
-
-    // Typing indicator
-    const typingId = Date.now() + 1;
-    setMessages(m => [...m, { id: typingId, role: 'agent', typing: true, time: now() }]);
+    const uid = Date.now();
+    const tid = uid + 1;
+    setMessages(m => [...m,
+      { id: uid, role: 'user', text, time: now() },
+      { id: tid, role: 'agent', typing: true, time: now() },
+    ]);
 
     try {
       const r = await fetch(`${API}/projects/${activeProject.project_id}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ message: text }),
       });
       const data = await r.json();
 
-      setMessages(m => m.filter(x => x.id !== typingId).concat({
-        id: Date.now() + 2,
-        role: 'agent',
-        text: data.message,
-        diagram: data.diagram_path,
-        state: data.conversation_state,
-        time: now(),
-      }));
+      const addCTA = data.conversation_state === 'architecture';
+      setMessages(m => m.filter(x => x.id !== tid).concat([
+        { id: uid+2, role:'agent', text:data.message, diagram:data.diagram_path,
+          state:data.conversation_state, time:now() },
+        ...(addCTA
+          ? [{ id: uid+3, role:'agent', type:'generate_cta', time:now() }]
+          : []),
+      ]));
 
-      // Refresh project state
       const pr = await fetch(`${API}/projects/${activeProject.project_id}`);
-      const p = await pr.json();
+      const p  = await pr.json();
       setActiveProject(p);
-      setProjects(prev => prev.map(x => x.project_id === p.project_id ? p : x));
-
+      setProjects(prev => prev.map(x => x.project_id===p.project_id ? p : x));
     } catch (e) {
-      setMessages(m => m.filter(x => x.id !== typingId).concat({
-        id: Date.now() + 2, role: 'agent',
-        text: `⚠️ Error: ${e.message}`, time: now(),
-      }));
-    } finally { setSending(false); }
-  }
-
-  async function triggerGenerate() {
-    if (!activeProject) return;
-    setGenJob({ status: 'running', message: 'Starting...' });
-    try {
-      await fetch(`${API}/projects/${activeProject.project_id}/generate`, { method: 'POST' });
-      // Update project status locally so polling kicks off
-      setActiveProject(p => ({ ...p, status: 'generating' }));
-      setProjects(prev => prev.map(x =>
-        x.project_id === activeProject.project_id ? { ...x, status: 'generating' } : x
+      setMessages(m => m.filter(x => x.id !== tid).concat(
+        [{ id: uid+2, role:'agent', text:`⚠ ${e.message}`, time:now() }]
       ));
-      toast('Generating agent — GitAgent + Lyzr ADK files…', 'info');
-    } catch { toast('Failed to start generation', 'error'); }
+    } finally { setSending(false); }
   }
 
   function onKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
-  // State → human label
-  const stateLabel = {
-    intro:'Intro', requirements:'Requirements',
-    tech:'Tech Stack', details:'Details',
-    review:'Review', architecture:'Architecture', complete:'Complete',
-  }[activeProject?.conversation_state] || '—';
+  // Textarea auto-grow — single line unless there are newlines
+  function handleInput(e) {
+    const val = e.target.value;
+    setInput(val);
+    const ta = e.target;
+    const lineH = 20; // px per line (font-size 13 * line-height 1.5 ≈ 20)
+    const padV  = 14; // top+bottom padding inside input-row
+    const hasNL = val.includes('\n');
+
+    if (!hasNL) {
+      ta.setAttribute('wrap', 'off');
+      ta.style.height     = lineH + 'px';
+      ta.style.overflowX  = 'hidden';
+      ta.style.overflowY  = 'hidden';
+    } else {
+      ta.setAttribute('wrap', 'soft');
+      ta.style.overflowX  = 'hidden';
+      ta.style.height     = 'auto';
+      const maxH = lineH * 10;
+      ta.style.height     = Math.min(ta.scrollHeight, maxH) + 'px';
+      ta.style.overflowY  = ta.scrollHeight > maxH ? 'auto' : 'hidden';
+    }
+  }
 
   return (
     <div className="app">
-      {/* Top bar */}
+      {/* ── Top bar ── */}
       <div className="topbar">
         <div className="topbar-left">
-          <div className="logo-icon">⚡</div>
-          <span className="logo-text">agent-for-agents</span>
-          <span className="logo-sub">by Lyzr ADK + GitAgent</span>
+          <LogoMark />
+          <span className="logo-text">BuilderAI</span>
+          <span className="logo-sub">· Lyzr ADK + GitAgent</span>
         </div>
         <div className="topbar-right">
-          {activeProject && <>
-            <span className="badge" style={{color:statusColor(status),
-              borderColor:`${statusColor(status)}44`,
-              background:`${statusColor(status)}10`}}>
-              {status}
-            </span>
-            <span className="badge badge-purple">{stateLabel}</span>
-          </>}
-          <span className="badge" style={{color:'var(--text-muted)'}}>v1.0</span>
+          {activeProject && (
+            <>
+              <span className="badge" style={{
+                color: statusColor(status),
+                borderColor: `${statusColor(status)}44`,
+                background: `${statusColor(status)}10`,
+              }}>{status}</span>
+              <span className="badge badge-purple">{stateLabel}</span>
+            </>
+          )}
+          {/* Download ZIP — always visible, greyed until generated */}
+          <button
+            className={`btn-dl ${isDone && activeProject ? 'ready' : ''}`}
+            onClick={downloadZip}
+            disabled={!isDone || !activeProject}
+            title={isDone ? 'Download agent ZIP' : 'Generate agent first'}
+          >
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+              <path d="M5.5 1v6M2 7l3.5 3 3.5-3M1 10h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Download ZIP
+          </button>
         </div>
       </div>
 
       <div className="workspace">
-        {/* Sidebar */}
-        <div className="sidebar">
-          <div className="sidebar-header">
-            <span className="sidebar-title">Projects</span>
-            <button className="btn-icon" onClick={() => setShowNewModal(true)} title="New project">＋</button>
-          </div>
-          <div className="project-list">
-            {projects.length === 0 && (
-              <div style={{padding:'20px 12px',textAlign:'center',color:'var(--text-dim)',fontSize:12}}>
-                No projects yet.<br />Click + to start.
-              </div>
-            )}
-            {projects.map(p => (
-              <div key={p.project_id}
-                className={`project-item ${activeProject?.project_id===p.project_id?'active':''}`}
-                onClick={() => selectProject(p)}
-              >
-                <div className="project-name">{p.name || 'Untitled'}</div>
-                <div className="project-meta">
-                  <div className="project-dot" style={{background:statusColor(p.status)}} />
-                  <span>{p.status}</span>
-                  <span>·</span>
-                  <span>{p.conversation_state}</span>
+        {/* ── Sidebar ── */}
+        <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          {sidebarCollapsed ? (
+            <div className="sidebar-rail">
+              {/* Expand button */}
+              <button className="btn-icon" onClick={() => setSidebarCollapsed(false)} title="Expand sidebar"
+                style={{fontSize:10,letterSpacing:0,fontWeight:700}}>›››</button>
+              {/* New project */}
+              <button className="btn-icon" onClick={() => setShowNewModal(true)} title="New project"
+                style={{fontSize:14}}>＋</button>
+              {/* Project dots */}
+              {projects.map(p => (
+                <div key={p.project_id}
+                  className={`rail-dot ${activeProject?.project_id===p.project_id?'active':''}`}
+                  style={{background:statusColor(p.status),color:statusColor(p.status)}}
+                  onClick={() => selectProject(p)}
+                  title={p.name}
+                />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="sidebar-header">
+                <span className="sidebar-title">Projects</span>
+                <div className="sidebar-actions">
+                  <button className="btn-icon" onClick={() => setShowNewModal(true)} title="New project"
+                    style={{fontSize:14}}>＋</button>
+                  <button className="btn-icon" onClick={() => setSidebarCollapsed(true)} title="Collapse sidebar"
+                    style={{fontSize:10,letterSpacing:0,fontWeight:700}}>‹‹‹</button>
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="project-list">
+                {projects.length === 0 && (
+                  <div style={{padding:'18px 10px',textAlign:'center',color:'var(--text-dim)',fontSize:11.5}}>
+                    No projects yet.<br />Click + to start.
+                  </div>
+                )}
+                {projects.map(p => (
+                  <div key={p.project_id}
+                    className={`project-item ${activeProject?.project_id===p.project_id?'active':''}`}
+                    onClick={() => selectProject(p)}>
+                    <div className="project-name">{p.name || 'Untitled'}</div>
+                    <div className="project-meta">
+                      <div className="project-dot" style={{background:statusColor(p.status)}} />
+                      <span>{p.status}</span>
+                      <span>·</span>
+                      <span>{p.conversation_state}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Chat panel */}
+        {/* ── Chat panel ── */}
         <div className="chat-panel">
           <div className="chat-panel-header">
             {activeProject ? (
-              <>
-                <div>
-                  <div className="chat-title">{activeProject.name}</div>
-                  <div className="chat-subtitle">
-                    Conversation state: <strong style={{color:'var(--purple)'}}>{stateLabel}</strong>
-                    {activeProject.requirements?.problem &&
-                      <> · {activeProject.requirements.problem.slice(0,60)}{activeProject.requirements.problem.length>60?'…':''}</>
-                    }
-                  </div>
+              <div>
+                <div className="chat-title">{activeProject.name}</div>
+                <div className="chat-subtitle">
+                  <strong style={{color:'var(--purple)'}}>{stateLabel}</strong>
+                  {activeProject.requirements?.problem && (
+                    <> · {activeProject.requirements.problem.slice(0,55)}
+                      {activeProject.requirements.problem.length>55 ? '…' : ''}</>
+                  )}
                 </div>
-              </>
+              </div>
             ) : (
               <div>
-                <div className="chat-title">Agent Builder</div>
+                <div className="chat-title">BuilderAI</div>
                 <div className="chat-subtitle">Select or create a project to begin</div>
               </div>
             )}
@@ -1078,107 +1165,158 @@ function App() {
 
           {!activeProject ? (
             <div className="empty-state">
-              <div className="empty-icon">🤖</div>
-              <div className="empty-title">Build an AI Agent</div>
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{opacity:0.18}}>
+                <circle cx="24" cy="9"  r="6.5" fill="var(--purple)"/>
+                <circle cx="9"  cy="39" r="6.5" fill="var(--purple)"/>
+                <circle cx="39" cy="39" r="6.5" fill="var(--purple)"/>
+                <line x1="24" y1="15.5" x2="10.8" y2="33" stroke="var(--purple)" strokeWidth="3" strokeLinecap="round"/>
+                <line x1="24" y1="15.5" x2="37.2" y2="33" stroke="var(--purple)" strokeWidth="3" strokeLinecap="round"/>
+                <line x1="15.4" y1="39" x2="32.6" y2="39" stroke="var(--purple)" strokeWidth="3" strokeLinecap="round"/>
+              </svg>
+              <div className="empty-title">BuilderAI</div>
               <div className="empty-desc">
-                Describe what you want — the agent gathers requirements across 6 conversation states,
-                then generates a complete <strong>GitAgent-compliant</strong> + <strong>Lyzr ADK</strong> package.
+                Describe what you want — the agent gathers requirements across 6 states,
+                then generates a <strong>GitAgent-compliant</strong> + <strong>Lyzr ADK</strong> package.
               </div>
-              <button className="btn-action primary" style={{marginTop:4}} onClick={() => setShowNewModal(true)}>
+              <button style={{
+                marginTop:4, padding:'8px 18px', borderRadius:7, fontSize:13, fontWeight:600,
+                border:'none', background:'var(--purple)', color:'#fff', cursor:'pointer',
+              }} onClick={() => setShowNewModal(true)}>
                 ＋ New Project
               </button>
             </div>
           ) : (
             <>
               <div className="messages">
-                {messages.map(m => (
-                  <div key={m.id} className={`msg ${m.role==='user'?'msg-user':''}`}>
-                    <div className={`msg-avatar ${m.role==='agent'?'avatar-agent':'avatar-user'}`}>
-                      {m.role === 'agent' ? '⚡' : '👤'}
-                    </div>
-                    <div className="msg-body">
-                      {m.typing ? (
-                        <div className="msg-bubble bubble-agent">
-                          <div className="typing">
-                            <div className="dot-pulse" /><div className="dot-pulse" /><div className="dot-pulse" />
+                {messages.map(m => {
+                  // Generate CTA bubble
+                  if (m.type === 'generate_cta') {
+                    return (
+                      <div key={m.id} className="msg">
+                        <div style={{flex:1}}>
+                          <div className="generate-cta-bubble">
+                            <div className="cta-title">
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                <circle cx="7" cy="7" r="6" stroke="var(--purple)" strokeWidth="1.4"/>
+                                <path d="M7 4v3.5l2 2" stroke="var(--purple)" strokeWidth="1.4" strokeLinecap="round"/>
+                              </svg>
+                              Requirements complete
+                            </div>
+                            <div className="cta-desc">
+                              Architecture is finalised. Click below to generate the full GitAgent + Lyzr ADK package.
+                            </div>
+                            {(status==='generated'||status==='approved') ? (
+                              <div className="cta-done">✓ Agent generated — download from top-right</div>
+                            ) : (
+                              <button className="btn-generate" disabled={isGenerating} onClick={triggerGenerate}>
+                                {isGenerating
+                                  ? <><span className="spin">⟳</span> Generating…</>
+                                  : <>
+                                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                        <circle cx="6" cy="2" r="1.5" fill="white"/>
+                                        <circle cx="2" cy="9.5" r="1.5" fill="white"/>
+                                        <circle cx="10" cy="9.5" r="1.5" fill="white"/>
+                                        <line x1="6" y1="3.5" x2="2.7" y2="8.2" stroke="white" strokeWidth="1.1" strokeLinecap="round"/>
+                                        <line x1="6" y1="3.5" x2="9.3" y2="8.2" stroke="white" strokeWidth="1.1" strokeLinecap="round"/>
+                                        <line x1="3.4" y1="9.5" x2="8.6" y2="9.5" stroke="white" strokeWidth="1.1" strokeLinecap="round"/>
+                                      </svg>
+                                      Generate Agent
+                                    </>
+                                }
+                              </button>
+                            )}
                           </div>
                         </div>
-                      ) : (
-                        <>
-                          <div className={`msg-bubble ${m.role==='agent'?'bubble-agent':'bubble-user'}`}
-                            style={{whiteSpace:'pre-wrap'}}>
-                            {m.text}
-                          </div>
-                          {m.diagram && (
-                            <div className="diagram-container">
-                              <div className="diagram-label">🏗 Architecture Diagram</div>
-                              <img src={`${API}/projects/${activeProject.project_id}/artifacts/diagram/architecture.png`}
-                                alt="Architecture diagram" onError={e => e.target.style.display='none'} />
+                      </div>
+                    );
+                  }
+
+                  // Normal message
+                  return (
+                    <div key={m.id} className={`msg ${m.role==='user'?'msg-user':''}`}>
+                      <div className={`msg-avatar ${m.role==='agent'?'avatar-agent':'avatar-user'}`}>
+                        {m.role === 'agent'
+                          ? <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+                              <circle cx="7.5" cy="3"   r="2"   fill="white"/>
+                              <circle cx="2.5" cy="12"  r="2"   fill="rgba(255,255,255,0.75)"/>
+                              <circle cx="12.5" cy="12" r="2"   fill="rgba(255,255,255,0.75)"/>
+                              <line x1="7.5" y1="5"  x2="3.3"  y2="10.4" stroke="rgba(255,255,255,0.55)" strokeWidth="1.2" strokeLinecap="round"/>
+                              <line x1="7.5" y1="5"  x2="11.7" y2="10.4" stroke="rgba(255,255,255,0.55)" strokeWidth="1.2" strokeLinecap="round"/>
+                              <line x1="4.4" y1="12" x2="10.6" y2="12"   stroke="rgba(255,255,255,0.55)" strokeWidth="1.2" strokeLinecap="round"/>
+                            </svg>
+                          : '↑'
+                        }
+                      </div>
+                      <div className="msg-body">
+                        {m.typing ? (
+                          <div className="msg-bubble bubble-agent">
+                            <div className="typing">
+                              <div className="dot-pulse"/><div className="dot-pulse"/><div className="dot-pulse"/>
                             </div>
-                          )}
-                          <div className="msg-time">{m.time}</div>
-                        </>
-                      )}
+                          </div>
+                        ) : (
+                          <>
+                            <div className={`msg-bubble ${m.role==='agent'?'bubble-agent':'bubble-user'}`}
+                              style={{whiteSpace:'pre-wrap'}}>
+                              {m.text}
+                            </div>
+                            {m.diagram && (
+                              <div className="diagram-container">
+                                <div className="diagram-label">⬡ Architecture</div>
+                                <img
+                                  src={`${API}/projects/${activeProject.project_id}/artifacts/diagram/architecture.png`}
+                                  alt="Architecture diagram"
+                                  onError={e => e.target.style.display='none'} />
+                              </div>
+                            )}
+                            <div className="msg-time">{m.time}</div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
 
               <div className="input-area">
-                <div className="action-bar">
-                  <button
-                    className={`btn-action ${canGenerate?'primary':''}`}
-                    disabled={!canGenerate || isGenerating}
-                    onClick={triggerGenerate}
-                    title={canGenerate ? 'Generate GitAgent + Lyzr ADK files' : 'Complete requirement gathering first'}
-                  >
-                    {isGenerating ? <><span className="spin">⟳</span> Generating…</> : '⚡ Generate Agent'}
-                  </button>
-                  {(status === 'generated' || status === 'approved') && (
-                    <button className="btn-action" onClick={async () => {
-                      const r = await fetch(`${API}/projects/${activeProject.project_id}/download`);
-                      const blob = await r.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a'); a.href = url;
-                      a.download = `${activeProject.name}-gitagent.zip`; a.click();
-                      URL.revokeObjectURL(url);
-                    }}>
-                      ⬇ Download ZIP
-                    </button>
-                  )}
-                </div>
                 <div className="input-row">
                   <textarea
                     ref={textareaRef}
-                    rows={1}
-                    placeholder={sending ? 'Waiting for agent…' : 'Describe your agent or answer the question…'}
+                    wrap="off"
+                    placeholder={sending ? 'Waiting…' : 'Describe your agent or answer the question…'}
                     value={input}
                     disabled={sending || isGenerating}
-                    onChange={e => {
-                      setInput(e.target.value);
-                      e.target.style.height = 'auto';
-                      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                    }}
+                    onChange={handleInput}
                     onKeyDown={onKey}
                   />
-                  <button className="btn-send" disabled={!input.trim() || sending || isGenerating} onClick={sendMessage}>
-                    ➤
+                  <button className="btn-send"
+                    disabled={!input.trim() || sending || isGenerating}
+                    onClick={sendMessage}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M1 11L11 6 1 1v4l7 1-7 1z" fill="white"/>
+                    </svg>
                   </button>
                 </div>
-                <div className="input-hint">Enter to send · Shift+Enter for new line · Complete all 6 states to unlock Generate</div>
+                <div className="input-hint">Enter to send · Shift+Enter for new line</div>
               </div>
             </>
           )}
         </div>
 
-        {/* Right panel — builder + files */}
+        {/* ── Draggable divider ── */}
+        <div
+          className={`divider ${isDragging ? 'dragging' : ''}`}
+          onMouseDown={startDrag}
+          title="Drag to resize"
+        />
+
+        {/* ── Right panel ── */}
         <BuilderPanel
           status={status}
           genJob={genJob}
-          onGenerate={triggerGenerate}
           projectId={activeProject?.project_id}
-          onFilesLoaded={() => {}}
+          panelWidth={rightWidth}
         />
       </div>
 
